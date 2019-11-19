@@ -3,7 +3,7 @@
 ### Version: Python 3.7.4
 ### Date: 2019-11-14 09:53:16
 ### LastEditors: ChlorineLv@outlook.com
-### LastEditTime: 2019-11-18 15:11:54
+### LastEditTime: 2019-11-19 11:17:34
 ### Description: 
 '''
 
@@ -13,9 +13,9 @@ import time
 
 def get_name_list():
     '''
-    ### description: 
+    ### description: 以工号为key的人员名单
     ### param {type} 
-    ### return: 以工号为key的人员名单dict
+    ### return: dict
     ### example: {'工号1': {'姓名': '1', '手机': 1, '分公司': '1', ...}, '工号2': {'姓名': '2', '手机': 2, '分公司': '2', ...}, ......}
     '''
     excel_file = f'{os.path.dirname(__file__)}\广州电信分公司_用户管理导出(2019-11-04).xlsx'
@@ -36,9 +36,9 @@ def get_name_list():
 
 def get_zhuang_list():
     '''
-    ### description: 
+    ### description: 以工号为key的各人装机次数
     ### param {type} 
-    ### return: 以工号为key的各人装机次数dict
+    ### return: dict
     ### example: {'工号1': {0: 次数1}, '工号2': {0: 次数2}, '工号3': {0: 次数3}, ......}
     '''
     csv_file = f'{os.path.dirname(__file__)}\表1装移机工单一览表.csv'
@@ -59,9 +59,9 @@ def get_zhuang_list():
 
 def get_xiu_list():
     '''
-    ### description: 
+    ### description: 以工号为key的各人修障次数
     ### param {type} 
-    ### return: 以工号为key的各人修障次数dict 
+    ### return: dict 
     ### example: {'工号1': {0: 次数1}, '工号2': {0: 次数2}, '工号3': {0: 次数3}, ......}
     '''
     csv_file = f'{os.path.dirname(__file__)}\表2障碍用户申告一览表.csv'
@@ -81,9 +81,9 @@ def get_xiu_list():
 
 def get_cui_list(sheet_cui_name, column_cui_name, column_people_name):
     '''
-    ### description: 
+    ### description: 以工号为key的各人催装or催装大于等于4次的工单数
     ### param {type} 
-    ### return:  以工号为key的各人催装or催装大于等于4次的单数dict
+    ### return:  dict
     ### example: {'工号1': {0: 次数1}, '工号2': {0: 次数2}, '工号3': {0: 次数3}, ......}
     '''
     excel_file = f'{os.path.dirname(__file__)}\催装催修清单10月.xlsx'
@@ -104,7 +104,25 @@ def get_cui_list(sheet_cui_name, column_cui_name, column_people_name):
     return df.to_frame().to_dict(orient='index')
 
 
+def get_bao_list(excel_file, excel_sheet, column_name, column_judge):
+    '''
+    ### description: 以工号为key的各人抱怨/绿通次数
+    ### param { (str)excel文件所在位置, (str)sheet名称, (str)工号列名, (str)用于筛选的列名 } 
+    ### return: dict 
+    ### example: {'工号1': {0: 次数1}, '工号2': {0: 次数2}, '工号3': {0: 次数3}, ......}
+    '''
+    # excel_file = input(f'请输入《抱怨清单统计2019年10月》文件名：（默认：{excel_file}）\n').strip() or excel_file
+    print(f'正在处理:{excel_file}')
+    # 下载下来的excel像是gbk格式
+    df = pd.DataFrame(pd.read_excel(excel_file, sheet_name=excel_sheet))[[column_name, column_judge]]
+    # 以处理人工号计算频次
+    df = df.groupby(by=column_name).size()
+    # 先转为dataframe再转为dict
+    return df.to_frame().to_dict(orient='index')
+
+
 if __name__ == "__main__":
+    t_start = time.time()
     # 获取名单
     dict_name = get_name_list()
     # 获取装移工作量
@@ -113,10 +131,15 @@ if __name__ == "__main__":
     dict_xiu = get_xiu_list()
     # 获取催装大于4次的单数
     dict_cuizhuang = get_cui_list('催装', '前台催装次数', '处理人工号')
-    print(dict_cuizhuang)
+    # print(dict_cuizhuang)
     # 获取催修大于4次的单数
     dict_cuixiu = get_cui_list('催修', '前台催修次数', '修理员工号')
-    print(dict_cuixiu)
+    # print(dict_cuixiu)
+    # 获取抱怨量
+    file_baoyuan = f'{os.path.dirname(__file__)}\抱怨清单统计2019年10月.xlsx'
+    dict_baoyuan = get_bao_list(file_baoyuan, '清单', '工号', '服务类别')
+    file_lvtong = f'{os.path.dirname(__file__)}\绿通单清单2019年10月.xlsx'
+    dict_lvtong = get_bao_list(file_lvtong, '1', '处理人工号', '服务类型')
     n = 0
     for i in dict_name:
         dict_name[i]['装移机'] = dict_zhuang.get(i, {0:0})[0]
@@ -124,16 +147,13 @@ if __name__ == "__main__":
         dict_name[i]['光衰整治'] = 0
         dict_name[i]['合计'] = dict_name[i]['装移机'] + dict_name[i]['修障'] + dict_name[i]['光衰整治']
         dict_name[i]['合计（日均8，20工作日）'] = 0 if dict_name[i]['合计']/20 < 8 else 1
+        # 《催装催修》拿过来时少了个0
         if n == 0:
-            # 《催装催修》拿过来时少了个0
-            print('已为《催装催修》中头部缺少0的工号补齐……')
-        if i.startswith('0'):
-            i1 = i[1:]
-        else:
-            i1 = i
+            print('已为《催装催修》中头部缺少0的工号进行匹配前的适配……')
+        i1 = i[1:] if i.startswith('0') else i
         dict_name[i]['催修≥4'] = dict_cuixiu.get(i1, {0:0})[0]
         dict_name[i]['催装≥4'] = dict_cuizhuang.get(i1, {0:0})[0]
-        
+        dict_name[i]['抱怨'] = dict_baoyuan.get(i1, {0:0})[0] + dict_lvtong.get(i1, {0:0})[0]
         
         n+=1
                 
@@ -141,3 +161,4 @@ if __name__ == "__main__":
     print(df)
     temp_excel_file = f'{os.path.dirname(__file__)}\中间表：人员产能表：{time.strftime("%Y-%m-%d", time.localtime())}.xlsx'
     df.to_excel(excel_writer = temp_excel_file, index = True)
+    print(f'已完成，保存地址{temp_excel_file}\n总耗时{time.time() - t_start}秒')

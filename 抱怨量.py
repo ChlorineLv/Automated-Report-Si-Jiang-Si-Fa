@@ -3,7 +3,7 @@
 ### Version: Python 3.7.4
 ### Date: 2019-11-18 16:50:21
 ### LastEditors: ChlorineLv@outlook.com
-### LastEditTime: 2019-11-19 09:39:00
+### LastEditTime: 2019-11-19 11:09:06
 ### Description: 计算抱怨量
 '''
 
@@ -69,5 +69,5 @@ if __name__ == "__main__":
                 
     df = pd.DataFrame.from_dict(dict_name, orient='index')
     print(df)
-    temp_excel_file = f'{os.path.dirname(__file__)}\中间表：人员产能表：{time.strftime("%Y-%m-%d", time.localtime())}.xlsx'
+    temp_excel_file = f'{os.path.dirname(__file__)}\中间表：人员抱怨：{time.strftime("%Y-%m-%d", time.localtime())}.xlsx'
     df.to_excel(excel_writer = temp_excel_file, index = True)

@@ -3,7 +3,7 @@
 ### Version: Python 3.7.4
 ### Date: 2019-11-18 16:50:21
 :LastEditors: ChlorineLv@outlook.com
-:LastEditTime: 2019-11-19 17:29:37
+:LastEditTime: 2019-11-20 17:34:10
 ### Description: 计算抱怨量
 '''
 
@@ -50,7 +50,7 @@ def get_specify_df(excel_file, excel_sheet, column_list):
 def specify_df_baoyuan(df_get, c_name):
     '''
     :description: 统计抱怨/绿通dataframe中各人抱怨量
-    :param df_get {dataframe} :
+    :param df_get {dataframe} : 原始df
     :param c_name {str} : 工号字段具体名称
     :return: dict {'工号1': {0: 次数1}, '工号2': {0: 次数2}, '工号3': {0: 次数3}, ......}
     '''
@@ -59,36 +59,49 @@ def specify_df_baoyuan(df_get, c_name):
     return df.to_frame().to_dict(orient='index')
 
 
-    def specify_df_wulishiyue(df_get, c_name, c_judge, c_content1, c_content2):
-        '''
-        :description: 返回无理失约判断("服务3"为"超时未修复故障"或"未按预约时间上门")后的dict
-        :param df_get {dataframe} :
-        :param c_name {str} : 工号字段具体名称
-        :param c_judge {dict} : 用于判别的{字段1: 内容1, 字段2: 内容2}字典
-        :return: 
-        '''
-        """ TODO """
-        len_judge_list = len(c_judge)
-        return {}
+def specify_df_wulishiyue(df_get, c_name, c_judge):
+    '''
+    ## description: 返回无理失约判断("服务3"为"超时未修复故障"或"未按预约时间上门")后的dict
+    :param df_get {dataframe} : 原始df
+    :param c_name {str} : 工号字段具体名称
+    :param c_judge1 {list} : 用于判别的 [{字段1: 内容1}, {字段2: 内容2}] 字典
+    :return: 
+    '''
+    # print(df_get)
+    # df1 = df_get.loc[df_get['服务3'] == '超时未修复故障']
+    # df2 = df_get.loc[df_get['服务3'] == '未按预约时间上门']
+    ls = []
+    for i in range(len(c_judge)):
+        for (k,v) in c_judge[i].items():
+            """ 存入list中，每个项都是dataframe """
+            ls.append(df_get.loc[df_get[k] == c_judge[i][k]])
+            """ 将取每个dataframe的并集 """
+            if i>0:
+                df = pd.merge(ls[i], ls[i-1], on=df_get.columns.tolist(), how='outer')
+    """ 工号频次groupby """
+    df = df.groupby(by=c_name, as_index=False).count().set_index(c_name)
+""" TODO 装、维的无理失约要分开算，即装绿+装抱，维绿+维报 """
+    return df.to_dict(orient='record')
 
 
 if __name__ == "__main__":
+    t_start = time.time()
     # 获取名单
     dict_name = get_name_list()
     """ 获取《抱怨》的dataframe """
     file_baoyuan = f'{os.path.dirname(__file__)}\抱怨清单统计2019年10月.xlsx'
     # file_baoyuan = input(f'请输入《抱怨清单统计2019年10月》文件名：（默认：{file_baoyuan}）\n').strip() or file_baoyuan
-    df_baoyuan = get_specify_df(file_baoyuan, '清单', ['工号', '服务类别'])
+    df_baoyuan = get_specify_df(file_baoyuan, '清单', ['工号', '服务2', '服务3'])
     """ 获取《绿通》的dataframe """
     file_lvtong = f'{os.path.dirname(__file__)}\绿通单清单2019年10月.xlsx'
     # file_lvtong = input(f'请输入《抱怨清单统计2019年10月》文件名：（默认：{file_lvtong}）\n').strip() or file_lvtong
-    df_lvtong = get_specify_df(file_lvtong, '1', ['处理人工号','服务类型'])
+    df_lvtong = get_specify_df(file_lvtong, '1', ['处理人工号', '服务类型'])
     """ 获取各人《抱怨》总量和《绿通》总量 """
     dict_baoyuan_total = specify_df_baoyuan(df_baoyuan, '工号')
     dict_lvtong_total = specify_df_baoyuan(df_lvtong, '处理人工号')
     """ 获取各人《抱怨》《绿通》中无理失约 """
-    """ TODO 无理失约 """
-    dict_baoyuan_wulishiyue = specify_df_wulishiyue(df_baoyuan, '工号', {'服务3':'超时未修复故障', '服务3':'未按预约时间上门'})
+    dict_baoyuan_wulishiyue = specify_df_wulishiyue(df_baoyuan, '工号', [{'服务3': '超时未修复故障'}, {'服务3': '未按预约时间上门'}])
+    dict_lvtong_wulishiyue = specify_df_wulishiyue(df_lvtong, '处理人工号', [{'服务类型': '修障问题-故障超时未修复（4小时）'}, {'服务类型': '装移机问题-未按预约时间上门（4小时）'}])
     n = 0
     for i in dict_name:
         # 《催装催修》拿过来时少了个0
@@ -96,10 +109,11 @@ if __name__ == "__main__":
             print('已为《催装催修》中头部缺少0的工号进行匹配前的适配……')
         i1 = i[1:] if i.startswith('0') else i
         dict_name[i]['抱怨'] = dict_baoyuan_total.get(i1, {0:0})[0] + dict_lvtong_total.get(i1, {0:0})[0]
-        
+        # dict_name[i]['无理失约'] = dict_
         n+=1
                 
     df = pd.DataFrame.from_dict(dict_name, orient='index')
     print(df)
     temp_excel_file = f'{os.path.dirname(__file__)}\中间表：人员抱怨无理失约：{time.strftime("%Y-%m-%d", time.localtime())}.xlsx'
-    df.to_excel(excel_writer = temp_excel_file, index = True)
+    # df.to_excel(excel_writer = temp_excel_file, index = True)
+    # print(f'已完成，保存地址{temp_excel_file}\n总耗时{time.time() - t_start}秒')

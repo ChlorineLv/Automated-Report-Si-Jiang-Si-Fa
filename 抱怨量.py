@@ -3,7 +3,7 @@
 ### Version: Python 3.7.4
 ### Date: 2019-11-18 16:50:21
 :LastEditors: ChlorineLv@outlook.com
-:LastEditTime: 2019-11-20 17:34:10
+:LastEditTime: 2019-11-21 17:05:02
 ### Description: 计算抱怨量
 '''
 
@@ -59,30 +59,40 @@ def specify_df_baoyuan(df_get, c_name):
     return df.to_frame().to_dict(orient='index')
 
 
-def specify_df_wulishiyue(df_get, c_name, c_judge):
+def specify_df_frequency(df_get, c_name, c_judge):
     '''
-    ## description: 返回无理失约判断("服务3"为"超时未修复故障"或"未按预约时间上门")后的dict
-    :param df_get {dataframe} : 原始df
-    :param c_name {str} : 工号字段具体名称
-    :param c_judge1 {list} : 用于判别的 [{字段1: 内容1}, {字段2: 内容2}] 字典
+    :description: 返回df中各项含特定字段的频次
+    :param df_get {dataframe} : dataframe
+    :param c_name {str} : 需要保留的字段
+    :param c_judge {dict} : 用于判断的列:值对，如{'服务3':'超时未修复故障'}
+    :return: dataframe     [处理人工号  0]
+                           [工号1,     1]
+                           [工号2,     1]
+                           [工号3,     1]
+                           [工号4,     1]
+    '''
+    for (k,v) in c_judge.items():
+        key = k
+        value = c_judge[k]
+    df = df_get.loc[df_get[key]==value][[c_name, key]].groupby(by=c_name).count()
+    df.columns = [0]
+    # temp_excel_file = f'{os.path.dirname(__file__)}\中间表：{c_name}{value}：{time.strftime("%Y-%m-%d", time.localtime())}.xlsx'
+    # df.to_excel(excel_writer = temp_excel_file, index = True)
+    return df
+
+
+def merge_df_count(df1, df2, c_list):
+    '''
+    :description: 
+    :param {type} :
     :return: 
     '''
-    # print(df_get)
-    # df1 = df_get.loc[df_get['服务3'] == '超时未修复故障']
-    # df2 = df_get.loc[df_get['服务3'] == '未按预约时间上门']
-    ls = []
-    for i in range(len(c_judge)):
-        for (k,v) in c_judge[i].items():
-            """ 存入list中，每个项都是dataframe """
-            ls.append(df_get.loc[df_get[k] == c_judge[i][k]])
-            """ 将取每个dataframe的并集 """
-            if i>0:
-                df = pd.merge(ls[i], ls[i-1], on=df_get.columns.tolist(), how='outer')
-    """ 工号频次groupby """
-    df = df.groupby(by=c_name, as_index=False).count().set_index(c_name)
-""" TODO 装、维的无理失约要分开算，即装绿+装抱，维绿+维报 """
-    return df.to_dict(orient='record')
-
+    df1.columns = c_list
+    df2.columns = c_list
+    """ 单纯拼在下方 """
+    df = pd.concat([df1, df2], axis=0)
+    df = df.groupby(by=c_list[0]).sum()
+    return df.to_dict(orient='index')
 
 if __name__ == "__main__":
     t_start = time.time()
@@ -99,21 +109,31 @@ if __name__ == "__main__":
     """ 获取各人《抱怨》总量和《绿通》总量 """
     dict_baoyuan_total = specify_df_baoyuan(df_baoyuan, '工号')
     dict_lvtong_total = specify_df_baoyuan(df_lvtong, '处理人工号')
-    """ 获取各人《抱怨》《绿通》中无理失约 """
-    dict_baoyuan_wulishiyue = specify_df_wulishiyue(df_baoyuan, '工号', [{'服务3': '超时未修复故障'}, {'服务3': '未按预约时间上门'}])
-    dict_lvtong_wulishiyue = specify_df_wulishiyue(df_lvtong, '处理人工号', [{'服务类型': '修障问题-故障超时未修复（4小时）'}, {'服务类型': '装移机问题-未按预约时间上门（4小时）'}])
+    """ 获取各人《抱怨》中装维无理失约 """
+    dict_baoyuan_xiuzhang = specify_df_frequency(df_baoyuan, '工号', {'服务3': '超时未修复故障'}).to_dict(orient='index')
+    dict_baoyuan_zhuangji = specify_df_frequency(df_baoyuan, '工号', {'服务3': '未按预约时间上门'}).to_dict(orient='index')
+    """ 获取各人《绿通》中装维无理失约 """
+    dict_lvtong_xiuzhang = specify_df_frequency(df_lvtong, '处理人工号', {'服务类型': '修障问题-故障超时未修复（4小时）'}).to_dict(orient='index')
+    dict_lvtong_zhuangji = specify_df_frequency(df_lvtong, '处理人工号', {'服务类型': '装移机问题-未按预约时间上门（4小时）'}).to_dict(orient='index')
     n = 0
     for i in dict_name:
-        # 《催装催修》拿过来时少了个0
+        """ 《催装催修》拿过来时少了个0 """
         if n == 0:
             print('已为《催装催修》中头部缺少0的工号进行匹配前的适配……')
         i1 = i[1:] if i.startswith('0') else i
         dict_name[i]['抱怨'] = dict_baoyuan_total.get(i1, {0:0})[0] + dict_lvtong_total.get(i1, {0:0})[0]
-        # dict_name[i]['无理失约'] = dict_
+        """ 好像装、维无理失约放一起了，装机无理失约均为0 """
+        dict_name[i]['装机无理失约'] = 0
+        dict_name[i]['装维无理失约'] = dict_baoyuan_xiuzhang.get(i1, {0:0})[0] + dict_baoyuan_zhuangji.get(i1, {0:0})[0] + dict_lvtong_xiuzhang.get(i1, {0:0})[0] + dict_lvtong_zhuangji.get(i1, {0:0})[0]
+        # dict_name[i]['抱怨装'] = dict_baoyuan_zhuangji.get(i1, {0:0})[0]
+        # dict_name[i]['抱怨修'] = dict_baoyuan_xiuzhang.get(i1, {0:0})[0]
+        # dict_name[i]['绿通装'] = dict_lvtong_zhuangji.get(i1, {0:0})[0]
+        # dict_name[i]['绿通修'] = dict_lvtong_xiuzhang.get(i1, {0:0})[0]
+
         n+=1
                 
     df = pd.DataFrame.from_dict(dict_name, orient='index')
-    print(df)
+    # print(df)
     temp_excel_file = f'{os.path.dirname(__file__)}\中间表：人员抱怨无理失约：{time.strftime("%Y-%m-%d", time.localtime())}.xlsx'
-    # df.to_excel(excel_writer = temp_excel_file, index = True)
-    # print(f'已完成，保存地址{temp_excel_file}\n总耗时{time.time() - t_start}秒')
+    df.to_excel(excel_writer = temp_excel_file, index = True)
+    print(f'已完成，保存地址{temp_excel_file}\n总耗时{time.time() - t_start}秒')

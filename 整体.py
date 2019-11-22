@@ -3,7 +3,7 @@
 :Version: Python 3.7.4
 :Date: 2019-11-14 09:53:16
 :LastEditors: ChlorineLv@outlook.com
-:LastEditTime: 2019-11-21 17:40:12
+:LastEditTime: 2019-11-22 17:48:49
 :Description: Null
 '''
 
@@ -161,7 +161,7 @@ if __name__ == "__main__":
     """ 获取《抱怨》的dataframe """
     file_baoyuan = f'{os.path.dirname(__file__)}\抱怨清单统计2019年10月.xlsx'
     # file_baoyuan = input(f'请输入《抱怨清单统计2019年10月》文件名：（默认：{file_baoyuan}）\n').strip() or file_baoyuan
-    df_baoyuan = get_specify_df(file_baoyuan, '清单', ['工号', '服务类别'])
+    df_baoyuan = get_specify_df(file_baoyuan, '清单', ['工号', '服务2', '服务3'])
     """ 获取《绿通》的dataframe """
     file_lvtong = f'{os.path.dirname(__file__)}\绿通单清单2019年10月.xlsx'
     # file_lvtong = input(f'请输入《抱怨清单统计2019年10月》文件名：（默认：{file_lvtong}）\n').strip() or file_lvtong
@@ -175,6 +175,9 @@ if __name__ == "__main__":
     """ 获取各人《绿通》中装维无理失约 """
     dict_lvtong_xiuzhang = specify_df_frequency(df_lvtong, '处理人工号', {'服务类型': '修障问题-故障超时未修复（4小时）'}).to_dict(orient='index')
     dict_lvtong_zhuangji = specify_df_frequency(df_lvtong, '处理人工号', {'服务类型': '装移机问题-未按预约时间上门（4小时）'}).to_dict(orient='index')
+    """ 《抱怨》服务2：装/移机人员服务问题，维修人员服务问题 """
+    dict_fuwutaidu_xiuzhang = specify_df_frequency(df_baoyuan, '工号', {'服务2': '装/移机人员服务问题'}).to_dict(orient='index')
+    dict_fuwutaidu_zhuangji = specify_df_frequency(df_baoyuan, '工号', {'服务2': '维修人员服务问题'}).to_dict(orient='index')
     n = 0
     for i in dict_name:
         dict_name[i]['装移机'] = dict_zhuang.get(i, {0:0})[0]
@@ -184,18 +187,34 @@ if __name__ == "__main__":
         dict_name[i]['合计（日均8，20工作日）'] = 0 if dict_name[i]['合计']/20 < 8 else 1
         # 《催装催修》拿过来时少了个0
         if n == 0:
-            print('已为《催装催修》中头部缺少0的工号进行匹配前的适配……')
+            print('已为《催装催修清单》中头部缺少0的工号进行匹配前的适配……')
         i1 = i[1:] if i.startswith('0') else i
-        dict_name[i]['催修≥4'] = dict_cuixiu.get(i1, {0:0})[0]
-        dict_name[i]['催装≥4'] = dict_cuizhuang.get(i1, {0:0})[0]
-        dict_name[i]['抱怨'] = dict_baoyuan_total.get(i1, {0:0})[0] + dict_lvtong_total.get(i1, {0:0})[0]
+        dict_name[i]['非常满意'] = 0
+        dict_name[i]['满意'] = 0
+        dict_name[i]['不满意'] = 0
+        dict_name[i]['满意奖金'] = dict_name[i]['满意'] * 0 + dict_name[i]['非常满意'] * 5
+        dict_name[i]['表扬（暂停）'] = 0
+        dict_name[i]['表扬奖金'] = 0
+        dict_name[i]['奖金'] = 0
+        dict_name[i]['抱怨量'] = dict_baoyuan_total.get(i1, {0:0})[0] + dict_lvtong_total.get(i1, {0:0})[0]
         """ 好像装、维无理失约放一起了，装机无理失约均为0? """
         dict_name[i]['装机无理失约'] = 0
         dict_name[i]['装维无理失约'] = dict_baoyuan_xiuzhang.get(i1, {0:0})[0] + dict_baoyuan_zhuangji.get(i1, {0:0})[0] + dict_lvtong_xiuzhang.get(i1, {0:0})[0] + dict_lvtong_zhuangji.get(i1, {0:0})[0]
+        dict_name[i]['装机零失约奖金（暂停）'] = 0
+        dict_name[i]['零抱怨奖金'] = 1 if dict_name[i]['装机无理失约'] == 0 and dict_name[i]['装维无理失约'] == 0 and dict_name[i]['合计（日均8，20工作日）'] >= 0 else 0
+        dict_name[i]['服务态度'] = dict_fuwutaidu_xiuzhang.get(i1, {0:0})[0] + dict_fuwutaidu_zhuangji.get(i1, {0:0})[0]
+        dict_name[i]['虚假回单'] = 0
+        dict_name[i]['工信'] = 0
+        dict_name[i]['光宽缓装虚假退单'] = 0
+        dict_name[i]['催装催修≥4'] = dict_cuixiu.get(i1, {0:0})[0] + dict_cuizhuang.get(i1, {0:0})[0]
+        dict_name[i]['扣罚分数'] = min(3*(dict_name[i]['装维无理失约'] + dict_name[i]['服务态度'] + dict_name[i]['虚假回单'] + dict_name[i]['光宽缓装虚假退单'] + dict_name[i]['催装催修≥4']) + 20*dict_name[i]['工信'] + 0.26*dict_name[i]['不满意'], 20)
+        dict_name[i]['扣罚金额'] = min(dict_name[i]['扣罚分数']*38, 1000)
+        dict_name[i]['扣罚次数'] = dict_name[i]['装维无理失约'] + dict_name[i]['服务态度'] + dict_name[i]['虚假回单'] + dict_name[i]['光宽缓装虚假退单'] + dict_name[i]['催装催修≥4'] + dict_name[i]['工信'] + dict_name[i]['不满意']
+        dict_name[i]['奖励（单月扣罚3次不奖励）'] = 0 if dict_name[i]['扣罚次数'] > 3 else 1
         n+=1
                 
     df = pd.DataFrame.from_dict(dict_name, orient='index')
-    print(df)
+    # print(df)
     temp_excel_file = f'{os.path.dirname(__file__)}\中间表：人员产能表：{time.strftime("%Y-%m-%d", time.localtime())}.xlsx'
     df.to_excel(excel_writer = temp_excel_file, index = True)
     print(f'已完成，保存地址{temp_excel_file}\n总耗时{time.time() - t_start}秒')

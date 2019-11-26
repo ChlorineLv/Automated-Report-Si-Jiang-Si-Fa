@@ -3,7 +3,7 @@
 :Version: Python 3.7.4
 :Date: 2019-11-14 09:53:16
 :LastEditors: ChlorineLv@outlook.com
-:LastEditTime: 2019-11-22 17:48:49
+:LastEditTime: 2019-11-26 15:12:19
 :Description: Null
 '''
 
@@ -19,13 +19,15 @@ def get_name_dict():
     '''
     excel_file = f'{os.path.dirname(__file__)}\广州电信分公司_用户管理导出(2019-11-04).xlsx'
     # excel_file = input(f'请输入《人员名单》文件名：(默认：{excel_file})\n').strip() or excel_file
-    print(f'正在处理:{excel_file}')
+    print(f'正在处理“人员名单”: {excel_file}')
     """ 只保留下面的列 """
     df = pd.DataFrame(pd.read_excel(excel_file))[['综调登录工号', '姓名', '手机', '分公司', '单位名称', '人员类别', '岗位类型', '在职状态']]
     """ 字段内容筛选 """
     df = df.loc[df['岗位类型'] == '外线施工岗'].loc[df['在职状态'] == '在职']
     """ 将手机号完整记录，不再是科学记数法 """
     df['手机'] = df['手机'].astype('int64')
+    """ 工号通过lambda函数去除首部的0 """
+    df['综调登录工号'] = df['综调登录工号'].map(lambda x: str(x)[1:] if str(x).startswith('0') else str(x))
     """ 工号列变index """
     df.set_index('综调登录工号', inplace=True)
     # print(df)
@@ -41,17 +43,18 @@ def get_zhuang_dict():
     '''
     csv_file = f'{os.path.dirname(__file__)}\表1装移机工单一览表.csv'
     # csv_file = input(f'请输入《装移机工单一览表》文件名：（默认：{csv_file}）\n').strip() or csv_file
-    print(f'正在处理:{csv_file}')
+    print(f'正在处理“装移机工单量”: {csv_file}')
     df = pd.DataFrame(pd.read_csv(csv_file, encoding='gbk'))[['施工类型','处理人工号']]
+    df['处理人工号'] = df['处理人工号'].map(lambda x: str(x)[1:] if str(x).startswith('0') else str(x))
     """ 取反，取施工类型不包括拆机、其他、移拆机 """
     df = df[~df['施工类型'].isin(['拆机'])]
     df = df[~df['施工类型'].isin(['其他'])]
     df = df[~df['施工类型'].isin(['移拆'])]
     # print(df)
     """ 以处理人工号计算频次 """
-    df = df.groupby(by='处理人工号').size()
-    """ 先转为dataframe再转为dict """
-    return df.to_frame().to_dict(orient='index')
+    df = df.groupby(by='处理人工号').size().to_frame()
+    """ 先在前面转为dataframe再转为dict """
+    return df.to_dict(orient='index')
 
 
 def get_xiu_dict():
@@ -63,41 +66,20 @@ def get_xiu_dict():
     '''
     csv_file = f'{os.path.dirname(__file__)}\表2障碍用户申告一览表.csv'
     # csv_file = input(f'请输入《表2障碍用户申告一览表》文件名：（默认：{csv_file}）\n').strip() or csv_file
-    print(f'正在处理:{csv_file}')
+    print(f'正在处理“修障工单量”: {csv_file}')
     df = pd.DataFrame(pd.read_csv(csv_file, encoding='gbk'))[['部门分局','修理员工号']]
+    df['修理员工号'] = df['修理员工号'].map(lambda x: str(x)[1:] if str(x).startswith('0') else str(x))
     """ 取反，取部门分局不包括合作方（甘肃万维）、合作方（天讯） """
     df = df[~df['部门分局'].isin(['合作方（甘肃万维）'])]
     df = df[~df['部门分局'].isin(['合作方（天讯）'])]
     # print(df)
     """ 以处理人工号计算频次 """
-    df = df.groupby(by='修理员工号').size()
-    """ 先转为dataframe再转为dict """
-    return df.to_frame().to_dict(orient='index')
-
-def get_cui_dict(sheet_cui_name, column_cui_name, column_people_name):
-    '''
-    ### description: 以工号为key的各人催装or催装大于等于4次的工单数
-    ### param {type} 
-    ### return:  dict
-    ### example: {'工号1': {0: 次数1}, '工号2': {0: 次数2}, '工号3': {0: 次数3}, ......}
-    '''
-    excel_file = f'{os.path.dirname(__file__)}\催装催修清单10月.xlsx'
-    # excel_file = input(f'请输入《催装催修清单10月》文件名：(默认：{excel_file})\n').strip() or excel_file
-    print(f'正在处理{column_cui_name}:{excel_file}')
-    """ 只保留列‘处理人工号’/‘修理员工号’，‘催x次数’/‘前台催x次数’ """
-    df = pd.DataFrame(pd.read_excel(excel_file, sheet_name=sheet_cui_name))[[column_people_name, column_cui_name, '录音开始时间']]
-    # print(df)
-    df = df.fillna(-1)
-    """ 字段内容筛选‘催x次数’/‘前台催x次数’≥4次，且录音为空的 """
-    df = df.loc[df[column_cui_name] >= 4]
-    df = df.loc[df['录音开始时间'] == -1]
-    """ 以‘处理人工号’/‘修理员工号’计算频次 """
-    df = df.groupby(by=column_people_name).size()
-    """ 先转为dataframe再转为dict """
-    return df.to_frame().to_dict(orient='index')
+    df = df.groupby(by='修理员工号').size().to_frame()
+    """ 先在前面转为dataframe再转为dict """
+    return df.to_dict(orient='index')
 
 
-def get_specify_df(excel_file, excel_sheet, column_list):
+def get_specified_df(excel_file, excel_sheet, column_list=0):
     '''
     :description: 返回保留某几列的dataframe
     :param excel_file {str} : excel文件所在位置
@@ -106,8 +88,32 @@ def get_specify_df(excel_file, excel_sheet, column_list):
     :return: dataframe
     '''
     print(f'正在处理:{excel_file}')
-    df = pd.DataFrame(pd.read_excel(excel_file, sheet_name=excel_sheet))[column_list]
+    if column_list != 0:
+        df = pd.DataFrame(pd.read_excel(excel_file, sheet_name=excel_sheet, dtype={column_list[0]: str}))[column_list]
+    else:
+        df = pd.DataFrame(pd.read_excel(excel_file, sheet_name=excel_sheet, dtype={column_list[0]: str}))
+    df[column_list[0]] = df[column_list[0]].map(lambda x: str(x)[1:] if str(x).startswith('0') else str(x))
+    # print(df)
     return df
+
+
+def specify_df_cui(df, c_name, c_judge):
+    '''
+    :description: 筛选‘催x次数’/‘前台催x次数’≥4次，且录音为空的
+    :param df_get {dataframe} : dataframe
+    :param c_name {string} : 工号
+    :param c_judge {string} : "催装"、"催修"
+    :return: dict
+    '''
+    df = df.fillna(0)
+    """ 字段内容筛选‘催x次数’/‘前台催x次数’≥4次，且录音为空的 """
+    df = df.loc[df[c_judge] >= 4]
+    df = df.loc[df['录音开始时间'] == 0]
+    """ 以‘处理人工号’/‘修理员工号’计算频次 """
+    df = df.groupby(by=c_name).size().to_frame()
+    print(c_name, df)
+    """ 先在前面转为dataframe再转为dict """
+    return df.to_dict(orient='index')
 
 
 def specify_df_baoyuan(df_get, c_name):
@@ -118,11 +124,11 @@ def specify_df_baoyuan(df_get, c_name):
     :return: dict {'工号1': {0: 次数1}, '工号2': {0: 次数2}, '工号3': {0: 次数3}, ......}
     '''
     # 以处理人工号计算频次
-    df = df_get.groupby(by=c_name).size()
-    return df.to_frame().to_dict(orient='index')
+    df = df_get.groupby(by=c_name).size().to_frame()
+    return df.to_dict(orient='index')
 
     
-def specify_df_frequency(df_get, c_name, c_judge):
+def specify_df_frequency(df_get, c_name, c_judge=0):
     '''
     :description: 返回df中各项含特定字段的频次
     :param df_get {dataframe} : dataframe
@@ -134,14 +140,19 @@ def specify_df_frequency(df_get, c_name, c_judge):
                            [工号3,     1]
                            [工号4,     1]
     '''
-    for (k,v) in c_judge.items():
-        key = k
-        value = c_judge[k]
-    df = df_get.loc[df_get[key]==value][[c_name, key]].groupby(by=c_name).count()
+    """ 将工号等转为string格式 """
+    df_get[c_name] = df_get[c_name].apply(str)
+    if c_judge == 0:
+        df = df_get.groupby(by=c_name).count()
+    else:
+        for (k,v) in c_judge.items():
+            key = k
+            value = c_judge[k]
+        df = df_get.loc[df_get[key]==value][[c_name, key]].groupby(by=c_name).count()
     df.columns = [0]
     # temp_excel_file = f'{os.path.dirname(__file__)}\中间表：{c_name}{value}：{time.strftime("%Y-%m-%d", time.localtime())}.xlsx'
     # df.to_excel(excel_writer = temp_excel_file, index = True)
-    return df
+    return df.to_dict(orient='index')
 
 
 if __name__ == "__main__":
@@ -153,31 +164,51 @@ if __name__ == "__main__":
     """ 获取修障工作量 """
     dict_xiu = get_xiu_dict()
     """ 获取催装大于4次的单数 """
-    dict_cuizhuang = get_cui_dict('催装', '前台催装次数', '处理人工号')
+    file_cuizhuang = f'{os.path.dirname(__file__)}\催装催修清单10月.xlsx'
+    # file_cuizhuang = input(f'请输入《催装催修清单10月》文件名：(默认：{file_cuizhuang})\n').strip() or file_cuizhuang
+    sheet_cuizhuang = '催装'
+    # sheet_cuizhuang = input(f'请输入sheet名：（默认{sheet_cuizhuang})\n').strip() or sheet_cuizhuang
+    df_cuizhuang = get_specified_df(file_cuizhuang, sheet_cuizhuang, ['处理人工号', '前台催装次数', '录音开始时间'])
+    dict_cuizhuang = specify_df_cui(df_cuizhuang, '处理人工号', '前台催装次数')
     # print(dict_cuizhuang)
     """ 获取催修大于4次的单数 """
-    dict_cuixiu = get_cui_dict('催修', '前台催修次数', '修理员工号')
+    file_cuixiu = f'{os.path.dirname(__file__)}\催装催修清单10月.xlsx'
+    # file_cuixiu = input(f'请输入《催装催修清单10月》文件名：(默认：{file_cuixiu})\n').strip() or file_cuixiu
+    sheet_cuixiu = '催修'
+    # sheet_cuixiu = input(f'请输入sheet名：（默认{sheet_cuixiu})\n').strip() or sheet_cuixiu
+    df_cuixiu = get_specified_df(file_cuixiu, sheet_cuixiu, ['修理员工号', '前台催修次数', '录音开始时间'])
+    dict_cuixiu = specify_df_cui(df_cuixiu, '修理员工号', '前台催修次数')
     # print(dict_cuixiu)
     """ 获取《抱怨》的dataframe """
     file_baoyuan = f'{os.path.dirname(__file__)}\抱怨清单统计2019年10月.xlsx'
     # file_baoyuan = input(f'请输入《抱怨清单统计2019年10月》文件名：（默认：{file_baoyuan}）\n').strip() or file_baoyuan
-    df_baoyuan = get_specify_df(file_baoyuan, '清单', ['工号', '服务2', '服务3'])
+    df_baoyuan = get_specified_df(file_baoyuan, '清单', ['工号', '服务2', '服务3'])
     """ 获取《绿通》的dataframe """
     file_lvtong = f'{os.path.dirname(__file__)}\绿通单清单2019年10月.xlsx'
     # file_lvtong = input(f'请输入《抱怨清单统计2019年10月》文件名：（默认：{file_lvtong}）\n').strip() or file_lvtong
-    df_lvtong = get_specify_df(file_lvtong, '1', ['处理人工号','服务类型'])
+    df_lvtong = get_specified_df(file_lvtong, '1', ['处理人工号','服务类型'])
     """ 获取各人《抱怨》总量和《绿通》总量 """
     dict_baoyuan_total = specify_df_baoyuan(df_baoyuan, '工号')
     dict_lvtong_total = specify_df_baoyuan(df_lvtong, '处理人工号')
     """ 获取各人《抱怨》中装维无理失约 """
-    dict_baoyuan_xiuzhang = specify_df_frequency(df_baoyuan, '工号', {'服务3': '超时未修复故障'}).to_dict(orient='index')
-    dict_baoyuan_zhuangji = specify_df_frequency(df_baoyuan, '工号', {'服务3': '未按预约时间上门'}).to_dict(orient='index')
+    dict_baoyuan_xiuzhang = specify_df_frequency(df_baoyuan, '工号', {'服务3': '超时未修复故障'})
+    dict_baoyuan_zhuangji = specify_df_frequency(df_baoyuan, '工号', {'服务3': '未按预约时间上门'})
     """ 获取各人《绿通》中装维无理失约 """
-    dict_lvtong_xiuzhang = specify_df_frequency(df_lvtong, '处理人工号', {'服务类型': '修障问题-故障超时未修复（4小时）'}).to_dict(orient='index')
-    dict_lvtong_zhuangji = specify_df_frequency(df_lvtong, '处理人工号', {'服务类型': '装移机问题-未按预约时间上门（4小时）'}).to_dict(orient='index')
+    dict_lvtong_xiuzhang = specify_df_frequency(df_lvtong, '处理人工号', {'服务类型': '修障问题-故障超时未修复（4小时）'})
+    dict_lvtong_zhuangji = specify_df_frequency(df_lvtong, '处理人工号', {'服务类型': '装移机问题-未按预约时间上门（4小时）'})
     """ 《抱怨》服务2：装/移机人员服务问题，维修人员服务问题 """
-    dict_fuwutaidu_xiuzhang = specify_df_frequency(df_baoyuan, '工号', {'服务2': '装/移机人员服务问题'}).to_dict(orient='index')
-    dict_fuwutaidu_zhuangji = specify_df_frequency(df_baoyuan, '工号', {'服务2': '维修人员服务问题'}).to_dict(orient='index')
+    dict_fuwutaidu_xiuzhang = specify_df_frequency(df_baoyuan, '工号', {'服务2': '装/移机人员服务问题'})
+    dict_fuwutaidu_zhuangji = specify_df_frequency(df_baoyuan, '工号', {'服务2': '维修人员服务问题'})
+    """ 获取光宽缓装虚假退单dict """
+    file_tuidan = f'{os.path.dirname(__file__)}\\10月光宽退单规范.xlsx'
+    # file_tuidan = input(f'请输入《10月光宽退单规范》文件名：（默认：{file_tuidan}）\n').strip() or file_tuidan
+    df_tuidan = get_specified_df(file_tuidan, 'Sheet2', ['工号', '退单是否规范'])
+    dict_tuidan = specify_df_frequency(df_tuidan, '工号', {'退单是否规范': '不规范'})
+    """ 获取工信部dict """
+    file_gongxin = f'{os.path.dirname(__file__)}\\工信部清单20191031.xlsx'
+    # file_gongxin = input(f'请输入《工信部清单20191031》文件名：（默认：{file_gongxin}）\n').strip() or file_gongxin
+    df_gongxin = get_specified_df(file_gongxin, '10月', ['处理工号', '工单编号'])
+    dict_gongxin = specify_df_frequency(df_gongxin, '处理工号')
     n = 0
     for i in dict_name:
         dict_name[i]['装移机'] = dict_zhuang.get(i, {0:0})[0]
@@ -185,10 +216,6 @@ if __name__ == "__main__":
         dict_name[i]['光衰整治'] = 0
         dict_name[i]['合计'] = dict_name[i]['装移机'] + dict_name[i]['修障'] + dict_name[i]['光衰整治']
         dict_name[i]['合计（日均8，20工作日）'] = 0 if dict_name[i]['合计']/20 < 8 else 1
-        # 《催装催修》拿过来时少了个0
-        if n == 0:
-            print('已为《催装催修清单》中头部缺少0的工号进行匹配前的适配……')
-        i1 = i[1:] if i.startswith('0') else i
         dict_name[i]['非常满意'] = 0
         dict_name[i]['满意'] = 0
         dict_name[i]['不满意'] = 0
@@ -196,21 +223,22 @@ if __name__ == "__main__":
         dict_name[i]['表扬（暂停）'] = 0
         dict_name[i]['表扬奖金'] = 0
         dict_name[i]['奖金'] = 0
-        dict_name[i]['抱怨量'] = dict_baoyuan_total.get(i1, {0:0})[0] + dict_lvtong_total.get(i1, {0:0})[0]
+        dict_name[i]['抱怨量'] = dict_baoyuan_total.get(i, {0:0})[0] + dict_lvtong_total.get(i, {0:0})[0]
         """ 好像装、维无理失约放一起了，装机无理失约均为0? """
         dict_name[i]['装机无理失约'] = 0
-        dict_name[i]['装维无理失约'] = dict_baoyuan_xiuzhang.get(i1, {0:0})[0] + dict_baoyuan_zhuangji.get(i1, {0:0})[0] + dict_lvtong_xiuzhang.get(i1, {0:0})[0] + dict_lvtong_zhuangji.get(i1, {0:0})[0]
+        dict_name[i]['装维无理失约'] = dict_baoyuan_xiuzhang.get(i, {0:0})[0] + dict_baoyuan_zhuangji.get(i, {0:0})[0] + dict_lvtong_xiuzhang.get(i, {0:0})[0] + dict_lvtong_zhuangji.get(i, {0:0})[0]
         dict_name[i]['装机零失约奖金（暂停）'] = 0
         dict_name[i]['零抱怨奖金'] = 1 if dict_name[i]['装机无理失约'] == 0 and dict_name[i]['装维无理失约'] == 0 and dict_name[i]['合计（日均8，20工作日）'] >= 0 else 0
-        dict_name[i]['服务态度'] = dict_fuwutaidu_xiuzhang.get(i1, {0:0})[0] + dict_fuwutaidu_zhuangji.get(i1, {0:0})[0]
-        dict_name[i]['虚假回单'] = 0
-        dict_name[i]['工信'] = 0
-        dict_name[i]['光宽缓装虚假退单'] = 0
-        dict_name[i]['催装催修≥4'] = dict_cuixiu.get(i1, {0:0})[0] + dict_cuizhuang.get(i1, {0:0})[0]
+        dict_name[i]['服务态度'] = dict_fuwutaidu_xiuzhang.get(i, {0:0})[0] + dict_fuwutaidu_zhuangji.get(i, {0:0})[0]
+        dict_name[i]['虚假回单'] = n
+        dict_name[i]['工信'] = dict_gongxin.get(i, {0:0})[0]
+        dict_name[i]['光宽缓装虚假退单'] = dict_tuidan.get(i, {0:0})[0]
+        dict_name[i]['催装催修≥4'] = dict_cuixiu.get(i, {0:0})[0] + dict_cuizhuang.get(i, {0:0})[0]
         dict_name[i]['扣罚分数'] = min(3*(dict_name[i]['装维无理失约'] + dict_name[i]['服务态度'] + dict_name[i]['虚假回单'] + dict_name[i]['光宽缓装虚假退单'] + dict_name[i]['催装催修≥4']) + 20*dict_name[i]['工信'] + 0.26*dict_name[i]['不满意'], 20)
         dict_name[i]['扣罚金额'] = min(dict_name[i]['扣罚分数']*38, 1000)
         dict_name[i]['扣罚次数'] = dict_name[i]['装维无理失约'] + dict_name[i]['服务态度'] + dict_name[i]['虚假回单'] + dict_name[i]['光宽缓装虚假退单'] + dict_name[i]['催装催修≥4'] + dict_name[i]['工信'] + dict_name[i]['不满意']
         dict_name[i]['奖励（单月扣罚3次不奖励）'] = 0 if dict_name[i]['扣罚次数'] > 3 else 1
+
         n+=1
                 
     df = pd.DataFrame.from_dict(dict_name, orient='index')

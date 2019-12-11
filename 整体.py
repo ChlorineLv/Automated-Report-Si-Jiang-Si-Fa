@@ -3,24 +3,23 @@
 :Version: Python 3.7.4
 :Date: 2019-11-14 09:53:16
 :LastEditors: ChlorineLv@outlook.com
-:LastEditTime: 2019-12-06 17:12:43
+:LastEditTime: 2019-12-11 17:37:44
 :Description: Null
 '''
 
 import os
 import pandas as pd
 import time
+import sys
 
-def get_name_list():
+def get_name_list(excel_file):
     '''
     ### description: 
     ### param {type} 
     ### return: 以工号为key的人员名单dict
     ### example: {'工号1': {'姓名': '1', '手机': 1, '分公司': '1', ...}, '工号2': {'姓名': '2', '手机': 2, '分公司': '2', ...}, ......}
     '''
-    # excel_file = f'{os.path.dirname(__file__)}\广州电信分公司_用户管理导出(2019-11-04).xlsx'
-    excel_file = f'广州电信分公司_用户管理导出(2019-11-04).xlsx'
-    excel_file = input(f'\n请输入《人员名单》文件名：(默认：{excel_file})\n').strip() or excel_file
+    
     print(f'正在处理:{excel_file}\n')
     # 只保留下面的列
     df = pd.DataFrame(pd.read_excel(excel_file))[['综调登录工号', '姓名', '手机', '分公司', '单位名称', '人员类别', '岗位类型', '在职状态']]
@@ -36,22 +35,41 @@ def get_name_list():
     return df.to_dict(orient='index')
 
 
-def get_zhuang_dict():
+def get_name_from(excel_file):
+    '''
+    :description: 从已有《四奖四罚》中获得人员名单
+    :param excel_name {str} :
+    :param sheet_name {str} :
+    :param column_list {str} :取得的列名list
+    :return: dict
+    '''
+    print(f'正在处理:{excel_file}\n')
+    # 只保留下面的列
+    df = pd.DataFrame(pd.read_excel(excel_file, sheet_name='人员产能情况'))[['代维工号', '姓名', '工号', '手机号', '所属公司', '区域', '装维班', '人员类别', '人员属性', '岗位']]
+    df['代维工号'] = df['代维工号'].map(lambda x: str(x)[1:] if str(x).startswith('0') else str(x))
+    df.set_index('代维工号', inplace=True)
+    return df.to_dict(orient='index')
+
+
+def get_zhuang_dict(csv_file):
     '''
     :description: 以工号为key的各人装机次数
     :param {type} :
     :return: {'工号1': {0: 次数1}, '工号2': {0: 次数2}, '工号3': {0: 次数3}, ......}
     '''
-    # csv_file = f'{os.path.dirname(__file__)}\表1装移机工单一览表.csv'
-    csv_file = f'表1装移机工单一览表.csv'
-    csv_file = input(f'\n请输入《装移机工单一览表》文件名：（默认：{csv_file}）\n').strip() or csv_file
     print(f'正在处理“装移机工单量”: {csv_file}\n')
-    df = pd.DataFrame(pd.read_csv(csv_file, encoding='gbk'))[['施工类型','处理人工号']]
+    df = pd.DataFrame(pd.read_csv(csv_file, encoding='gb18030'))[['施工类型','处理人工号', '归档模式']]
     df['处理人工号'] = df['处理人工号'].map(lambda x: str(x)[1:] if str(x).startswith('0') else str(x))
     """ 取反，取施工类型不包括拆机、其他、移拆机 """
-    df = df[~df['施工类型'].isin(['拆机'])]
-    df = df[~df['施工类型'].isin(['其他'])]
-    df = df[~df['施工类型'].isin(['移拆'])]
+    df_temp = pd.DataFrame()
+    df_temp = df_temp.append(df[df['施工类型']=='改信息'])
+    df_temp = df_temp.append(df[df['施工类型']=='同楼移机'])
+    df_temp = df_temp.append(df[df['施工类型']=='新装'])
+    df_temp = df_temp.append(df[df['施工类型']=='移机'])
+    df_temp = df_temp.append(df[df['施工类型']=='移装'])
+    df_temp = df_temp.loc[df_temp['归档模式']=='正常归档']
+
+    df = df_temp
     # print(df)
     """ 以处理人工号计算频次 """
     df = df.groupby(by='处理人工号').size().to_frame()
@@ -59,16 +77,13 @@ def get_zhuang_dict():
     return df.to_dict(orient='index')
 
 
-def get_xiu_dict():
+def get_xiu_dict(csv_file):
     '''
     ### description: 以工号为key的各人修障次数
     ### param {type} 
     ### return: dict 
     ### example: {'工号1': {0: 次数1}, '工号2': {0: 次数2}, '工号3': {0: 次数3}, ......}
     '''
-    # csv_file = f'{os.path.dirname(__file__)}\表2障碍用户申告一览表.csv'
-    csv_file = f'表2障碍用户申告一览表.csv'
-    csv_file = input(f'\n请输入《表2障碍用户申告一览表》文件名：（默认：{csv_file}）\n').strip() or csv_file
     print(f'正在处理“修障工单量”: {csv_file}\n')
     df = pd.DataFrame(pd.read_csv(csv_file, encoding='gbk'))[['部门分局','修理员工号','专业名称']]
     df['修理员工号'] = df['修理员工号'].map(lambda x: str(x)[1:] if str(x).startswith('0') else str(x))
@@ -152,7 +167,7 @@ def specify_df_frequency(df_get, column_name, column_judge=0):
             value = column_judge[k]
         df = df_get.loc[df_get[key]==value][[column_name, key]].groupby(by=column_name).count()
     df.columns = [0]
-    # temp_excel_file = f'{os.path.dirname(__file__)}\中间表：{column_name}{value}：{time.strftime("%Y-%m-%d", time.localtime())}.xlsx'
+    # temp_excel_file = f'{os.path.dirname(os.path.realpath(sys.argv[0]))}\中间表：{column_name}{value}：{time.strftime("%Y-%m-%d", time.localtime())}.xlsx'
     # df.to_excel(excel_writer = temp_excel_file, index = True)
     return df.to_dict(orient='index')
 
@@ -180,7 +195,7 @@ def specify_df_frequency_or(df_get, column_name, column_judge=[]):
             df = df.append(df_get.loc[df_get[key]==value][[column_name, key]])
     df = df.groupby(by=column_name).count()
     df.columns = [0]
-    # temp_excel_file = f'{os.path.dirname(__file__)}\中间表：{column_name}{value}：{time.strftime("%Y-%m-%d", time.localtime())}.xlsx'
+    # temp_excel_file = f'{os.path.dirname(os.path.realpath(sys.argv[0]))}\中间表：{column_name}{value}：{time.strftime("%Y-%m-%d", time.localtime())}.xlsx'
     # df.to_excel(excel_writer = temp_excel_file, index = True)
     return df.to_dict(orient='index')
 
@@ -212,7 +227,7 @@ def specify_df_frequency_not_in_or(df_get, column_name, column_judge=[]):
     df = df_get[[column_name, key]]
     df = df.groupby(by=column_name).count()
     df.columns = [0]
-    # temp_excel_file = f'{os.path.dirname(__file__)}\中间表：{column_name}{value}：{time.strftime("%Y-%m-%d", time.localtime())}.xlsx'
+    # temp_excel_file = f'{os.path.dirname(os.path.realpath(sys.argv[0]))}\中间表：{column_name}{value}：{time.strftime("%Y-%m-%d", time.localtime())}.xlsx'
     # df.to_excel(excel_writer = temp_excel_file, index = True)
     return df.to_dict(orient='index')
 
@@ -242,171 +257,182 @@ def specify_df_manyi(df_get, column_name, column_judge):
 
 if __name__ == "__main__":
     t_start = time.time()
-    """ 获取名单 """
-    print("\n************处理：人员名单************")
-    dict_name = get_name_list()
-    """ 获取装移工作量 """
-    print("\n************处理：装移机工作量************")
-    dict_zhuang = get_zhuang_dict()
-    """ 获取修障工作量 """
-    print("\n************处理：修障工作量************")
-    dict_xiu = get_xiu_dict()
-    """ 获取催装大于4次的单数 """
-    print("\n************处理：催装≥4************")
-    # file_cuizhuang = f'{os.path.dirname(__file__)}\催装催修清单10月.xlsx'
-    file_cuizhuang = f'催装催修清单10月.xlsx'
-    file_cuizhuang = input(f'\n请输入《催装催修清单10月》文件名：(默认：{file_cuizhuang})\n').strip() or file_cuizhuang
-    sheet_cuizhuang = '催装'
-    # sheet_cuizhuang = input(f'\n请输入sheet名：（默认：{sheet_cuizhuang})\n').strip() or sheet_cuizhuang
-    df_cuizhuang = get_specified_df(file_cuizhuang, sheet_cuizhuang, ['处理人工号', '前台催装次数', '录音开始时间'])
-    dict_cuizhuang = specify_df_cui(df_cuizhuang, '处理人工号', '前台催装次数')
-    """ 获取催修大于4次的单数 """
-    print("\n************处理：催修≥4************")
-    # file_cuixiu = f'{os.path.dirname(__file__)}\催装催修清单10月.xlsx'
-    file_cuixiu = f'催装催修清单10月.xlsx'
-    file_cuixiu = input(f'\n请输入《催装催修清单10月》文件名：(默认：{file_cuixiu})\n').strip() or file_cuixiu
-    sheet_cuixiu = '催修'
-    # sheet_cuixiu = input(f'\n请输入sheet名：（默认：{sheet_cuixiu})\n').strip() or sheet_cuixiu
-    df_cuixiu = get_specified_df(file_cuixiu, sheet_cuixiu, ['修理员工号', '前台催修次数', '录音开始时间'])
-    dict_cuixiu = specify_df_cui(df_cuixiu, '修理员工号', '前台催修次数')
-    """ 获取《抱怨》的dataframe """
-    print("\n************处理：《抱怨单》************")
-    file_baoyuan = f'{os.path.dirname(__file__)}\抱怨清单统计2019年10月.xlsx'
-    file_baoyuan = f'抱怨清单统计2019年10月.xlsx'
-    file_baoyuan = input(f'\n请输入《抱怨清单统计2019年10月》文件名：（默认：{file_baoyuan}）\n').strip() or file_baoyuan
-    sheet_baoyuan = '清单'
-    # sheet_baoyuan = input(f'\n请输入sheet名：（默认：{sheet_baoyuan}）\n').strip() or sheet_baoyuan
-    df_baoyuan = get_specified_df(file_baoyuan, sheet_baoyuan, ['工号', '服务2', '服务3'])
-    """ 获取《绿通》的dataframe """
-    print("\n************处理：《绿通单》************")
-    # file_lvtong = f'{os.path.dirname(__file__)}\绿通单清单2019年10月.xlsx'
-    file_lvtong = f'绿通单清单2019年10月.xlsx'
-    file_lvtong = input(f'\n请输入《抱怨清单统计2019年10月》文件名：（默认：{file_lvtong}）\n').strip() or file_lvtong
-    sheet_lvtong = '1'
-    # sheet_lvtong = input(f'\n请输入sheet名：（默认：{sheet_lvtong}）\n').strip() or sheet_lvtong
-    df_lvtong = get_specified_df(file_lvtong, sheet_lvtong, ['处理人工号','服务类型'])
-    """ 获取各人《抱怨》总量和《绿通》总量 """
-    dict_baoyuan_total = specify_df_baoyuan(df_baoyuan, '工号')
-    dict_lvtong_total = specify_df_baoyuan(df_lvtong, '处理人工号')
-    """ 获取各人《抱怨》中装维无理失约 """
-    dict_baoyuan_xiuzhang = specify_df_frequency(df_baoyuan, '工号', {'服务3': '超时未修复故障'})
-    dict_baoyuan_zhuangji = specify_df_frequency(df_baoyuan, '工号', {'服务3': '未按预约时间上门'})
-    """ 获取各人《绿通》中装维无理失约 """
-    dict_lvtong_xiuzhang = specify_df_frequency(df_lvtong, '处理人工号', {'服务类型': '修障问题-故障超时未修复（4小时）'})
-    dict_lvtong_zhuangji = specify_df_frequency(df_lvtong, '处理人工号', {'服务类型': '装移机问题-未按预约时间上门（4小时）'})
-    """ 《抱怨》服务2：装/移机人员服务问题，维修人员服务问题 """
-    dict_fuwutaidu_xiuzhang = specify_df_frequency(df_baoyuan, '工号', {'服务2': '装/移机人员服务问题'})
-    dict_fuwutaidu_zhuangji = specify_df_frequency(df_baoyuan, '工号', {'服务2': '维修人员服务问题'})
-    """ 获取光宽缓装虚假退单dict """
-    print("\n************处理:光宽缓装虚假退单************")
-    # file_tuidan = f'{os.path.dirname(__file__)}\\10月光宽退单规范.xlsx'
-    file_tuidan = f'10月光宽退单规范.xlsx'
-    file_tuidan = input(f'\n请输入《10月光宽退单规范》文件名：（默认：{file_tuidan}）\n').strip() or file_tuidan
-    sheet_tuidan = 'Sheet2'
-    # sheet_tuidan = input(f'\n请输入sheet名：（默认：{sheet_tuidan}）\n').strip() or sheet_tuidan
-    df_tuidan = get_specified_df(file_tuidan, sheet_tuidan, ['工号', '退单是否规范'])
-    dict_tuidan = specify_df_frequency(df_tuidan, '工号', {'退单是否规范': '不规范'})
-    """ 获取工信部dict """
-    print("\n************处理：工信部单************")
-    # file_gongxin = f'{os.path.dirname(__file__)}\\工信部清单20191031.xlsx'
-    file_gongxin = f'工信部清单20191031.xlsx'
-    file_gongxin = input(f'\n请输入《工信部清单20191031》文件名：（默认：{file_gongxin}）\n').strip() or file_gongxin
-    sheet_gongxin = '10月'
-    # sheet_gongxin = input(f'\n请输入sheet名：（默认：{sheet_gongxin}）\n').strip() or sheet_gongxin
-    df_gongxin = get_specified_df(file_gongxin, sheet_gongxin, ['处理工号', '工单编号'])
-    dict_gongxin = specify_df_frequency(df_gongxin, '处理工号')
-    """ 获取ivr故障虚假回单dict """
-    print("\n************处理：ivr故障虚假回单************")
-    # file_xujia_ivr_guzhang = f'{os.path.dirname(__file__)}\\（IVR）故障虚假回单清单2019年10月.xlsx'
-    file_xujia_ivr_guzhang = f'（IVR）故障虚假回单清单2019年10月.xlsx'
-    file_xujia_ivr_guzhang = input(f'\n请输入《（IVR）故障虚假回单清单2019年10月》文件名：（默认：{file_xujia_ivr_guzhang}）\n').strip() or file_xujia_ivr_guzhang
-    sheet_xujia_ivr_guzhang = '2019-10-08工单明细'
-    # sheet_xujia_ivr_guzhang = input(f'\n请输入sheet名：（默认：{sheet_xujia_ivr_guzhang})\n').strip() or sheet_xujia_ivr_guzhang
-    df_xujia_ivr_guzhang = get_specified_df(file_xujia_ivr_guzhang, sheet_xujia_ivr_guzhang, ['查修员工号', 'B、请问您的故障修复了吗？'])
-    dict_xujia_ivr_guzhang = specify_df_frequency(df_xujia_ivr_guzhang, '查修员工号', {'B、请问您的故障修复了吗？': '未修复，请按3'})
-    """ 获取ivr装机虚假回单dict """
-    print("\n************处理：ivr装机虚假回单************")
-    # file_xujia_ivr_zhuangji = f'{os.path.dirname(__file__)}\\（IVR）装机虚假回单清单2019年10月.xlsx'
-    file_xujia_ivr_zhuangji = f'（IVR）装机虚假回单清单2019年10月.xlsx'
-    file_xujia_ivr_zhuangji = input(f'\n请输入《（IVR）装机虚假回单清单2019年10月》文件名：（默认：{file_xujia_ivr_zhuangji}）\n').strip() or file_xujia_ivr_zhuangji
-    sheet_xujia_ivr_zhuangji = '2019-10-08工单明细'
-    # sheet_xujia_ivr_zhuangji = input(f'\n请输入sheet名：（默认：{sheet_xujia_ivr_zhuangji})\n').strip() or sheet_xujia_ivr_zhuangji
-    df_xujia_ivr_zhuangji = get_specified_df(file_xujia_ivr_zhuangji, sheet_xujia_ivr_zhuangji, ['装维人员工号', 'B、请问您的电信业务能正常使用吗？'])
-    dict_xujia_ivr_zhuangji = specify_df_frequency_not_in_or(df_xujia_ivr_zhuangji, '装维人员工号',[{'B、请问您的电信业务能正常使用吗？': '能正常使用，请按2'}])
-    """ 获取人工故障虚假回单dict """
-    print("\n************处理：人工故障虚假回单************")
-    # file_xujia_rengong_guzhang = f'{os.path.dirname(__file__)}\\（人工）故障虚假回单清单2019年10月.xlsx'
-    file_xujia_rengong_guzhang = f'（人工）故障虚假回单清单2019年10月.xlsx'
-    file_xujia_rengong_guzhang = input(f'\n请输入《（人工）故障虚假回单清单2019年10月》文件名：（默认：{file_xujia_rengong_guzhang}）\n').strip() or file_xujia_rengong_guzhang
-    sheet_xujia_rengong_guzhang = 'Sheet1'
-    # sheet_xujia_rengong_guzhang = input(f'\n请输入sheet名：（默认：{sheet_xujia_rengong_guzhang})\n').strip() or sheet_xujia_rengong_guzhang
-    df_xujia_rengong_guzhang = get_specified_df(file_xujia_rengong_guzhang, sheet_xujia_rengong_guzhang, ['查修员工号', 'D、请问维修人员有联系您处理过吗？'])
-    dict_xujia_rengong_guzhang = specify_df_frequency(df_xujia_rengong_guzhang, '查修员工号', {'D、请问维修人员有联系您处理过吗？': '一直无人联系修障'})
-    """ 获取人工装机虚假回单dict """
-    print("\n************处理：人工装机虚假回单************")
-    # file_xujia_rengong_zhuangji = f'{os.path.dirname(__file__)}\\（人工）装机虚假回单清单2019年10月.xlsx'
-    file_xujia_rengong_zhuangji = f'（人工）装机虚假回单清单2019年10月.xlsx'
-    file_xujia_rengong_zhuangji = input(f'\n请输入《（人工）故障虚假回单清单2019年10月》文件名：（默认：{file_xujia_rengong_zhuangji}）\n').strip() or file_xujia_rengong_zhuangji
-    sheet_xujia_rengong_zhuangji = 'Sheet1'
-    # sheet_xujia_rengong_zhuangji = input(f'\n请输入sheet名：（默认：{sheet_xujia_rengong_zhuangji})\n').strip() or sheet_xujia_rengong_zhuangji
-    column_xujia_rengong_zhuangji = ['装维人员工号', 'B、请问您的电信业务能正常使用吗？', 'E、请问是哪种情况不能使用？', 'F、请问是什么原因没当场安装好呢？']
-    # df_xujia_rengong_zhuangji = get_specified_df(file_xujia_rengong_zhuangji, sheet_xujia_rengong_zhuangji, ['装维人员工号', 'B、请问您的电信业务能正常使用吗？'])
-    df_xujia_rengong_zhuangji = get_specified_df(file_xujia_rengong_zhuangji, sheet_xujia_rengong_zhuangji, column_xujia_rengong_zhuangji)
-    dict_xujia_rengong_zhuangji = specify_df_frequency_not_in_or(df_xujia_rengong_zhuangji, '装维人员工号',[{'B、请问您的电信业务能正常使用吗？': '能正常使用'}])
-    """ 修障满意度 """
-    print("\n************处理：修障满意度************")
-    # file_manyi_xiuzhang = f'{os.path.dirname(__file__)}\\修障服务测评清单（含IVR&人工）2019年10月.xlsx'
-    file_manyi_xiuzhang = f'修障服务测评清单（含IVR&人工）2019年10月.xlsx'
-    file_manyi_xiuzhang = input(f'\n请输入《修障服务测评清单（含IVR&人工）2019年10月》文件名：（默认：{file_manyi_xiuzhang}）\n').strip() or file_manyi_xiuzhang
-    sheet_manyi_xiuzhang = 'Sheet1'
-    # sheet_manyi_xiuzhang = input(f'\n请输入sheet名：（默认：{sheet_manyi_xiuzhang})\n').strip() or sheet_manyi_xiuzhang
-    df_manyi_xiuzhang = get_specified_df(file_manyi_xiuzhang, sheet_manyi_xiuzhang, ['操作工号', '满意度'])
-    dict_manyi_xiuzhang = specify_df_manyi(df_manyi_xiuzhang, '操作工号', [{'满意度':'非常满意'}, {'满意度':'满意'}, {'满意度':'不满意'}])
-    # print(dict_manyi_xiuzhang)
-    """ 装机满意度 """
-    print("\n************处理：装机满意度************")
-    # file_manyi_zhuangji = f'{os.path.dirname(__file__)}\\装机服务测评清单（含IVR&人工）2019年10月.xlsx'
-    file_manyi_zhuangji = f'装机服务测评清单（含IVR&人工）2019年10月.xlsx'
-    file_manyi_zhuangji = input(f'\n请输入《装机服务测评清单（含IVR&人工）2019年10月》文件名：（默认：{file_manyi_zhuangji}）\n').strip() or file_manyi_zhuangji
-    sheet_manyi_zhuangji = 'Sheet1'
-    # sheet_manyi_zhuangji = input(f'\n请输入sheet名：（默认：{sheet_manyi_zhuangji})\n').strip() or sheet_manyi_zhuangji
-    df_manyi_zhuangji = get_specified_df(file_manyi_zhuangji, sheet_manyi_zhuangji, ['装维人员工号', '满意度'])
-    dict_manyi_zhuangji = specify_df_manyi(df_manyi_zhuangji, '装维人员工号', [{'满意度':'非常满意'}, {'满意度':'满意'}, {'满意度':'不满意'}])
-
-    n = 0
-    for i in dict_name:
-        dict_name[i]['装移机'] = dict_zhuang.get(i, {0:0})[0]
-        dict_name[i]['修障'] = dict_xiu.get(i, {0:0})[0]
-        dict_name[i]['光衰整治'] = 0
-        dict_name[i]['合计'] = dict_name[i]['装移机'] + dict_name[i]['修障'] + dict_name[i]['光衰整治']
-        dict_name[i]['合计（日均8，20工作日）'] = 0 if dict_name[i]['合计']/20 < 8 else 1
-        dict_name[i]['非常满意'] = dict_manyi_xiuzhang.get(i, {'非常满意':0})['非常满意'] + dict_manyi_zhuangji.get(i, {'非常满意':0})['非常满意']
-        dict_name[i]['满意'] = dict_manyi_xiuzhang.get(i, {'满意':0})['满意'] + dict_manyi_zhuangji.get(i, {'满意':0})['满意']
-        dict_name[i]['不满意'] = dict_manyi_xiuzhang.get(i, {'不满意':0})['不满意'] + dict_manyi_zhuangji.get(i, {'不满意':0})['不满意']
-        dict_name[i]['满意奖金'] = dict_name[i]['满意'] * 0 + dict_name[i]['非常满意'] * 5
-        dict_name[i]['表扬（暂停）'] = 0
-        dict_name[i]['表扬奖金'] = 0
-        dict_name[i]['奖金'] = 0
-        dict_name[i]['抱怨量'] = dict_baoyuan_total.get(i, {0:0})[0] + dict_lvtong_total.get(i, {0:0})[0]
-        """ 好像装、维无理失约放一起了，装机无理失约均为0? """
-        dict_name[i]['装机无理失约'] = 0
-        dict_name[i]['装维无理失约'] = dict_baoyuan_xiuzhang.get(i, {0:0})[0] + dict_baoyuan_zhuangji.get(i, {0:0})[0] + dict_lvtong_xiuzhang.get(i, {0:0})[0] + dict_lvtong_zhuangji.get(i, {0:0})[0]
-        dict_name[i]['装机零失约奖金（暂停）'] = 0
-        dict_name[i]['零抱怨奖金'] = 1 if dict_name[i]['装机无理失约'] == 0 and dict_name[i]['装维无理失约'] == 0 and dict_name[i]['合计（日均8，20工作日）'] >= 0 else 0
-        dict_name[i]['服务态度'] = dict_fuwutaidu_xiuzhang.get(i, {0:0})[0] + dict_fuwutaidu_zhuangji.get(i, {0:0})[0]
-        dict_name[i]['虚假回单'] = dict_xujia_ivr_guzhang.get(i, {0:0})[0] + dict_xujia_ivr_zhuangji.get(i, {0:0})[0] + dict_xujia_rengong_guzhang.get(i, {0:0})[0] + dict_xujia_rengong_zhuangji.get(i, {0:0})[0]
-        dict_name[i]['工信'] = dict_gongxin.get(i, {0:0})[0]
-        dict_name[i]['光宽缓装虚假退单'] = dict_tuidan.get(i, {0:0})[0]
-        dict_name[i]['催装催修≥4'] = dict_cuixiu.get(i, {0:0})[0] + dict_cuizhuang.get(i, {0:0})[0]
-        dict_name[i]['扣罚分数'] = min(3*(dict_name[i]['装维无理失约'] + dict_name[i]['服务态度'] + dict_name[i]['虚假回单'] + dict_name[i]['光宽缓装虚假退单'] + dict_name[i]['催装催修≥4']) + 20*dict_name[i]['工信'] + 0.26*dict_name[i]['不满意'], 20)
-        dict_name[i]['扣罚金额'] = min(dict_name[i]['扣罚分数']*38, 1000)
-        dict_name[i]['扣罚次数'] = dict_name[i]['装维无理失约'] + dict_name[i]['服务态度'] + dict_name[i]['虚假回单'] + dict_name[i]['光宽缓装虚假退单'] + dict_name[i]['催装催修≥4'] + dict_name[i]['工信'] + dict_name[i]['不满意']
-        dict_name[i]['奖励（单月扣罚3次不奖励）'] = 0 if dict_name[i]['扣罚次数'] > 3 else 1
-
-        n+=1
-                
-    df = pd.DataFrame.from_dict(dict_name, orient='index')
-    # print(df)
-    temp_excel_file = f'{os.path.dirname(__file__)}\中间表：人员产能表：{time.strftime("%Y-%m-%d", time.localtime())}.xlsx'
-    df.to_excel(excel_writer = temp_excel_file, index = True)
-    print(f'已完成，保存地址{temp_excel_file}\n总耗时{time.time() - t_start}秒')
+    try:
+        print(f'地址脚本所在地址{os.path.dirname(os.path.realpath(sys.argv[0]))}')
+        option = input('是否需要手动修改文件名（y/n)\n').strip()
+        if option == '111':
+            temp_option = option
+            temp_exist_file = input(f'\n请输入已有四奖四罚文件名，以获取已有人员名单：\n').strip()
+            option = input('是否需要手动修改文件名（y/n)\n').strip()
+        else:
+            temp_option = 0
+        boolean = (option=='n' or option=='N')
+        month = input('请输入当前月份：（如10、11）\n').strip()
+        """ 获取名单 """
+        print("\n************  处理（1/15）：人员名单  ************")
+        # file_name = f'{os.path.dirname(os.path.realpath(sys.argv[0]))}\广州电信分公司_用户管理导出.xlsx'
+        file_name = f'广州电信分公司_用户管理导出.xlsx'
+        file_name = file_name if boolean==True else (input(f'\n请输入《人员名单》文件名：(默认：{file_name})\n').strip() or file_name)
+        if temp_option == '111':
+            dict_name = get_name_from(temp_exist_file)
+        else:
+            dict_name = get_name_list(file_name)
+        # dict_name = get_name_from()
+        """ 获取装移工作量 """
+        print("\n************  处理（2/15）：装移机工作量  ************")
+        # file_zhuangji = f'{os.path.dirname(os.path.realpath(sys.argv[0]))}\表1装移机工单一览表.csv'
+        file_zhuangji = f'表1装移机工单一览表.csv'
+        file_zhuangji = file_zhuangji if boolean==True else (input(f'\n请输入《表1装移机工单一览表》文件名：（默认：{file_zhuangji}）\n').strip() or file_zhuangji)
+        dict_zhuang = get_zhuang_dict(file_zhuangji)
+        """ 获取修障工作量 """
+        print("\n************  处理（3/15）：修障工作量  ************")
+        # file_xiuzhang = f'{os.path.dirname(os.path.realpath(sys.argv[0]))}\表2障碍用户申告一览表.csv'
+        file_xiuzhang = f'表2障碍用户申告一览表.csv'
+        file_xiuzhang = file_xiuzhang if boolean==True else (input(f'\n请输入《表2障碍用户申告一览表》文件名：（默认：{file_xiuzhang}）\n').strip() or file_xiuzhang)
+        dict_xiu = get_xiu_dict(file_xiuzhang)
+        """ 获取催装大于4次的单数 """
+        print("\n************  处理（4/15）：催装≥4  ************")
+        # file_cuizhuang = f'{os.path.dirname(os.path.realpath(sys.argv[0]))}\催装催修清单10月.xlsx'
+        file_cuizhuang = f'催装催修清单{month}月.xlsx'
+        file_cuizhuang = file_cuizhuang if boolean==True else (input(f'\n请输入《催装催修清单{month}月》文件名：(默认：{file_cuizhuang})\n').strip() or file_cuizhuang)
+        sheet_cuizhuang = '催装'
+        df_cuizhuang = get_specified_df(file_cuizhuang, sheet_cuizhuang, ['处理人工号', '前台催装次数', '录音开始时间'])
+        dict_cuizhuang = specify_df_cui(df_cuizhuang, '处理人工号', '前台催装次数')
+        """ 获取催修大于4次的单数 """
+        print("\n************  处理（5/15）：催修≥4  ************")
+        # file_cuixiu = f'{os.path.dirname(os.path.realpath(sys.argv[0]))}\催装催修清单10月.xlsx'
+        file_cuixiu = f'催装催修清单{month}月.xlsx'
+        file_cuixiu = file_cuixiu if boolean==True else (input(f'\n请输入《催装催修清单{month}月》文件名：(默认：{file_cuixiu})\n').strip() or file_cuixiu)
+        sheet_cuixiu = '催修'
+        df_cuixiu = get_specified_df(file_cuixiu, sheet_cuixiu, ['修理员工号', '前台催修次数', '录音开始时间'])
+        dict_cuixiu = specify_df_cui(df_cuixiu, '修理员工号', '前台催修次数')
+        """ 获取《抱怨》的dataframe """
+        print("\n************  处理（6/15）：《抱怨单》  ************")
+        # file_baoyuan = f'{os.path.dirname(os.path.realpath(sys.argv[0]))}\抱怨清单统计{month}月.xlsx'
+        file_baoyuan = f'抱怨清单统计{month}月.xlsx'
+        file_baoyuan = file_baoyuan if boolean==True else (input(f'\n请输入《抱怨清单统计{month}月》文件名：（默认：{file_baoyuan}）\n').strip() or file_baoyuan)
+        sheet_baoyuan = '清单'
+        df_baoyuan = get_specified_df(file_baoyuan, sheet_baoyuan, ['工号', '服务2', '服务3'])
+        """ 获取《绿通》的dataframe """
+        print("\n************  处理（7/15）：《绿通单》  ************")
+        # file_lvtong = f'{os.path.dirname(os.path.realpath(sys.argv[0]))}\绿通单清单10月.xlsx'
+        file_lvtong = f'绿通单清单{month}月.xlsx'
+        file_lvtong = file_lvtong if boolean==True else (input(f'\n请输入《抱怨清单统计{month}月》文件名：（默认：{file_lvtong}）\n').strip() or file_lvtong)
+        sheet_lvtong = '1'
+        df_lvtong = get_specified_df(file_lvtong, sheet_lvtong, ['处理人工号','服务类型'])
+        """ 获取各人《抱怨》总量和《绿通》总量 """
+        dict_baoyuan_total = specify_df_baoyuan(df_baoyuan, '工号')
+        dict_lvtong_total = specify_df_baoyuan(df_lvtong, '处理人工号')
+        """ 获取各人《抱怨》中装维无理失约 """
+        dict_baoyuan_xiuzhang = specify_df_frequency(df_baoyuan, '工号', {'服务3': '超时未修复故障'})
+        dict_baoyuan_zhuangji = specify_df_frequency(df_baoyuan, '工号', {'服务3': '未按预约时间上门'})
+        """ 获取各人《绿通》中装维无理失约 """
+        dict_lvtong_xiuzhang = specify_df_frequency(df_lvtong, '处理人工号', {'服务类型': '修障问题-故障超时未修复（4小时）'})
+        dict_lvtong_zhuangji = specify_df_frequency(df_lvtong, '处理人工号', {'服务类型': '装移机问题-未按预约时间上门（4小时）'})
+        """ 《抱怨》服务2：装/移机人员服务问题，维修人员服务问题 """
+        dict_fuwutaidu_xiuzhang = specify_df_frequency(df_baoyuan, '工号', {'服务2': '装/移机人员服务问题'})
+        dict_fuwutaidu_zhuangji = specify_df_frequency(df_baoyuan, '工号', {'服务2': '维修人员服务问题'})
+        """ 获取光宽缓装虚假退单dict """
+        print("\n************  处理（8/15）:光宽缓装虚假退单  ************")
+        # file_tuidan = f'{os.path.dirname(os.path.realpath(sys.argv[0]))}\\10月光宽退单规范.xlsx'
+        file_tuidan = f'{month}月光宽退单规范.xlsx'
+        file_tuidan = file_tuidan if boolean==True else (input(f'\n请输入《{month}月光宽退单规范》文件名：（默认：{file_tuidan}）\n').strip() or file_tuidan)
+        sheet_tuidan = 'Sheet2'
+        df_tuidan = get_specified_df(file_tuidan, sheet_tuidan, ['工号', '退单是否规范'])
+        dict_tuidan = specify_df_frequency(df_tuidan, '工号', {'退单是否规范': '不规范'})
+        """ 获取工信部dict """
+        print("\n************  处理（9/15）：工信部单  ************")
+        # file_gongxin = f'{os.path.dirname(os.path.realpath(sys.argv[0]))}\\工信部清单20191031.xlsx'
+        file_gongxin = f'工信部清单{month}月.xlsx'
+        file_gongxin = file_gongxin if boolean==True else (input(f'\n请输入《工信部清单{month}月》文件名：（默认：{file_gongxin}）\n').strip() or file_gongxin)
+        sheet_gongxin = f'{month}月'
+        df_gongxin = get_specified_df(file_gongxin, sheet_gongxin, ['处理工号', '工单编号'])
+        dict_gongxin = specify_df_frequency(df_gongxin, '处理工号')
+        """ 获取ivr故障虚假回单dict """
+        print("\n************  处理（10/15）：ivr故障虚假回单  ************")
+        # file_xujia_ivr_guzhang = f'{os.path.dirname(os.path.realpath(sys.argv[0]))}\\（IVR）故障虚假回单清单10月.xlsx'
+        file_xujia_ivr_guzhang = f'（IVR）故障虚假回单清单{month}月.xlsx'
+        file_xujia_ivr_guzhang = file_xujia_ivr_guzhang if boolean==True else (input(f'\n请输入《（IVR）故障虚假回单清单{month}月》文件名：（默认：{file_xujia_ivr_guzhang}）\n').strip() or file_xujia_ivr_guzhang)
+        sheet_xujia_ivr_guzhang = '工单明细'
+        df_xujia_ivr_guzhang = get_specified_df(file_xujia_ivr_guzhang, sheet_xujia_ivr_guzhang, ['查修员工号', 'B、请问您的故障修复了吗？'])
+        dict_xujia_ivr_guzhang = specify_df_frequency(df_xujia_ivr_guzhang, '查修员工号', {'B、请问您的故障修复了吗？': '未修复，请按3'})
+        """ 获取ivr装机虚假回单dict """
+        print("\n************  处理（11/15）：ivr装机虚假回单  ************")
+        # file_xujia_ivr_zhuangji = f'{os.path.dirname(os.path.realpath(sys.argv[0]))}\\（IVR）装机虚假回单清单10月.xlsx'
+        file_xujia_ivr_zhuangji = f'（IVR）装机虚假回单清单{month}月.xlsx'
+        file_xujia_ivr_zhuangji = file_xujia_ivr_zhuangji if boolean==True else (input(f'\n请输入《（IVR）装机虚假回单清单{month}月》文件名：（默认：{file_xujia_ivr_zhuangji}）\n').strip() or file_xujia_ivr_zhuangji)
+        sheet_xujia_ivr_zhuangji = '工单明细'
+        df_xujia_ivr_zhuangji = get_specified_df(file_xujia_ivr_zhuangji, sheet_xujia_ivr_zhuangji, ['装维人员工号', 'B、请问您的电信业务能正常使用吗？'])
+        dict_xujia_ivr_zhuangji = specify_df_frequency_not_in_or(df_xujia_ivr_zhuangji, '装维人员工号',[{'B、请问您的电信业务能正常使用吗？': '能正常使用，请按2'}])
+        """ 获取人工故障虚假回单dict """
+        print("\n************  处理（12/15）：人工故障虚假回单  ************")
+        # file_xujia_rengong_guzhang = f'{os.path.dirname(os.path.realpath(sys.argv[0]))}\\（人工）故障虚假回单清单10月.xlsx'
+        file_xujia_rengong_guzhang = f'（人工）故障虚假回单清单{month}月.xlsx'
+        file_xujia_rengong_guzhang =file_xujia_rengong_guzhang if boolean==True else (input(f'\n请输入《（人工）故障虚假回单清单{month}月》文件名：（默认：{file_xujia_rengong_guzhang}）\n').strip() or file_xujia_rengong_guzhang)
+        sheet_xujia_rengong_guzhang = 'Sheet1'
+        df_xujia_rengong_guzhang = get_specified_df(file_xujia_rengong_guzhang, sheet_xujia_rengong_guzhang, ['查修员工号', 'D、请问维修人员有联系您处理过吗？'])
+        dict_xujia_rengong_guzhang = specify_df_frequency(df_xujia_rengong_guzhang, '查修员工号', {'D、请问维修人员有联系您处理过吗？': '一直无人联系修障'})
+        """ 获取人工装机虚假回单dict """
+        print("\n************  处理（13/15）：人工装机虚假回单  ************")
+        # file_xujia_rengong_zhuangji = f'{os.path.dirname(os.path.realpath(sys.argv[0]))}\\（人工）装机虚假回单清单10月.xlsx'
+        file_xujia_rengong_zhuangji = f'（人工）装机虚假回单清单{month}月.xlsx'
+        file_xujia_rengong_zhuangji = file_xujia_rengong_zhuangji if boolean==True else (input(f'\n请输入《（人工）故障虚假回单清单{month}月》文件名：（默认：{file_xujia_rengong_zhuangji}）\n').strip() or file_xujia_rengong_zhuangji)
+        sheet_xujia_rengong_zhuangji = 'Sheet1'
+        column_xujia_rengong_zhuangji = ['装维人员工号', 'B、请问您的电信业务能正常使用吗？']
+        # df_xujia_rengong_zhuangji = get_specified_df(file_xujia_rengong_zhuangji, sheet_xujia_rengong_zhuangji, ['装维人员工号', 'B、请问您的电信业务能正常使用吗？'])
+        df_xujia_rengong_zhuangji = get_specified_df(file_xujia_rengong_zhuangji, sheet_xujia_rengong_zhuangji, column_xujia_rengong_zhuangji)
+        dict_xujia_rengong_zhuangji = specify_df_frequency_not_in_or(df_xujia_rengong_zhuangji, '装维人员工号',[{'B、请问您的电信业务能正常使用吗？': '能正常使用'}])
+        """ 修障满意度 """
+        print("\n************  处理（14/15）：修障满意度  ************")
+        # file_manyi_xiuzhang = f'{os.path.dirname(os.path.realpath(sys.argv[0]))}\\修障服务测评清单（含IVR&人工）10月.xlsx'
+        file_manyi_xiuzhang = f'修障服务测评清单（含IVR&人工）{month}月.xlsx'
+        file_manyi_xiuzhang = file_manyi_xiuzhang if boolean==True else (input(f'\n请输入《修障服务测评清单（含IVR&人工）{month}月》文件名：（默认：{file_manyi_xiuzhang}）\n').strip() or file_manyi_xiuzhang)
+        sheet_manyi_xiuzhang = 'Sheet1'
+        df_manyi_xiuzhang = get_specified_df(file_manyi_xiuzhang, sheet_manyi_xiuzhang, ['操作工号', '满意度'])
+        dict_manyi_xiuzhang = specify_df_manyi(df_manyi_xiuzhang, '操作工号', [{'满意度':'非常满意'}, {'满意度':'满意'}, {'满意度':'不满意'}])
+        # print(dict_manyi_xiuzhang)
+        """ 装机满意度 """
+        print("\n************  处理（15/15）：装机满意度  ************")
+        # file_manyi_zhuangji = f'{os.path.dirname(os.path.realpath(sys.argv[0]))}\\装机服务测评清单（含IVR&人工）10月.xlsx'
+        file_manyi_zhuangji = f'装机服务测评清单（含IVR&人工）{month}月.xlsx'
+        file_manyi_zhuangji = file_manyi_zhuangji if boolean==True else (input(f'\n请输入《装机服务测评清单（含IVR&人工）{month}月》文件名：（默认：{file_manyi_zhuangji}）\n').strip() or file_manyi_zhuangji)
+        sheet_manyi_zhuangji = 'Sheet1'
+        df_manyi_zhuangji = get_specified_df(file_manyi_zhuangji, sheet_manyi_zhuangji, ['装维人员工号', '满意度'])
+        dict_manyi_zhuangji = specify_df_manyi(df_manyi_zhuangji, '装维人员工号', [{'满意度':'非常满意'}, {'满意度':'满意'}, {'满意度':'不满意'}])
+        for i in dict_name:
+            dict_name[i]['装移机'] = dict_zhuang.get(i, {0:0})[0]
+            dict_name[i]['修障'] = dict_xiu.get(i, {0:0})[0]
+            dict_name[i]['光衰整治'] = 0
+            dict_name[i]['合计'] = dict_name[i]['装移机'] + dict_name[i]['修障'] + dict_name[i]['光衰整治']
+            dict_name[i]['合计（日均8，20工作日）'] = 0 if dict_name[i]['合计']/20 < 8 else 1
+            dict_name[i]['非常满意'] = dict_manyi_xiuzhang.get(i, {'非常满意':0})['非常满意'] + dict_manyi_zhuangji.get(i, {'非常满意':0})['非常满意']
+            dict_name[i]['满意'] = dict_manyi_xiuzhang.get(i, {'满意':0})['满意'] + dict_manyi_zhuangji.get(i, {'满意':0})['满意']
+            dict_name[i]['不满意'] = dict_manyi_xiuzhang.get(i, {'不满意':0})['不满意'] + dict_manyi_zhuangji.get(i, {'不满意':0})['不满意']
+            dict_name[i]['满意奖金'] = dict_name[i]['满意'] * 0 + dict_name[i]['非常满意'] * 5
+            dict_name[i]['表扬（暂停）'] = 0
+            dict_name[i]['表扬奖金'] = 0
+            dict_name[i]['奖金'] = 0
+            dict_name[i]['抱怨量'] = dict_baoyuan_total.get(i, {0:0})[0] + dict_lvtong_total.get(i, {0:0})[0]
+            """ 好像装、维无理失约放一起了，装机无理失约均为0? """
+            dict_name[i]['装机无理失约'] = 0
+            dict_name[i]['装维无理失约'] = dict_baoyuan_xiuzhang.get(i, {0:0})[0] + dict_baoyuan_zhuangji.get(i, {0:0})[0] + dict_lvtong_xiuzhang.get(i, {0:0})[0] + dict_lvtong_zhuangji.get(i, {0:0})[0]
+            dict_name[i]['装机零失约奖金（暂停）'] = 0
+            dict_name[i]['零抱怨奖金'] = 1 if dict_name[i]['装机无理失约'] == 0 and dict_name[i]['装维无理失约'] == 0 and dict_name[i]['合计（日均8，20工作日）'] >= 0 else 0
+            dict_name[i]['服务态度'] = dict_fuwutaidu_xiuzhang.get(i, {0:0})[0] + dict_fuwutaidu_zhuangji.get(i, {0:0})[0]
+            dict_name[i]['虚假回单'] = dict_xujia_ivr_guzhang.get(i, {0:0})[0] + dict_xujia_ivr_zhuangji.get(i, {0:0})[0] + dict_xujia_rengong_guzhang.get(i, {0:0})[0] + dict_xujia_rengong_zhuangji.get(i, {0:0})[0]
+            dict_name[i]['工信'] = dict_gongxin.get(i, {0:0})[0]
+            dict_name[i]['光宽缓装虚假退单'] = dict_tuidan.get(i, {0:0})[0]
+            dict_name[i]['催装催修≥4'] = dict_cuixiu.get(i, {0:0})[0] + dict_cuizhuang.get(i, {0:0})[0]
+            dict_name[i]['扣罚分数'] = min(3*(dict_name[i]['装维无理失约'] + dict_name[i]['服务态度'] + dict_name[i]['虚假回单'] + dict_name[i]['光宽缓装虚假退单'] + dict_name[i]['催装催修≥4']) + 20*dict_name[i]['工信'] + 0.26*dict_name[i]['不满意'], 20)
+            dict_name[i]['扣罚金额'] = min(dict_name[i]['扣罚分数']*38, 1000)
+            dict_name[i]['扣罚次数'] = dict_name[i]['装维无理失约'] + dict_name[i]['服务态度'] + dict_name[i]['虚假回单'] + dict_name[i]['光宽缓装虚假退单'] + dict_name[i]['催装催修≥4'] + dict_name[i]['工信'] + dict_name[i]['不满意']
+            dict_name[i]['奖励（单月扣罚3次不奖励）'] = 0 if dict_name[i]['扣罚次数'] > 3 else 1        
+        df = pd.DataFrame.from_dict(dict_name, orient='index')
+        # print(df)
+        temp_excel_file = f'{os.path.dirname(os.path.realpath(sys.argv[0]))}\中间表：人员产能表：{time.strftime("%Y-%m-%d", time.localtime())}.xlsx'
+        df.to_excel(excel_writer = temp_excel_file, index = True)
+        print("\n************  已完成  ************")
+        print(f'\n保存地址{temp_excel_file}\n总耗时{time.time() - t_start}秒')
+    except Exception as e:
+        print(e)
+    input(f'\n按回车离开')

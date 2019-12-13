@@ -3,7 +3,7 @@
 :Version: Python 3.7.4
 :Date: 2019-11-14 09:53:16
 :LastEditors: ChlorineLv@outlook.com
-:LastEditTime: 2019-12-11 17:37:44
+:LastEditTime: 2019-12-13 16:26:00
 :Description: Null
 '''
 
@@ -89,6 +89,7 @@ def get_xiu_dict(csv_file):
     df['修理员工号'] = df['修理员工号'].map(lambda x: str(x)[1:] if str(x).startswith('0') else str(x))
     """ 取反，剔除专业名称：现场检修 """
     df = df[~df['专业名称'].isin(['现场检修'])]
+    df = df[~df['专业名称'].isin(['预检预修'])]
     df = df[['部门分局','修理员工号']]
     """ 取反，取部门分局不包括合作方（甘肃万维）、合作方（天讯） """
     df = df[~df['部门分局'].isin(['合作方（甘肃万维）'])]
@@ -259,6 +260,7 @@ if __name__ == "__main__":
     t_start = time.time()
     try:
         print(f'地址脚本所在地址{os.path.dirname(os.path.realpath(sys.argv[0]))}')
+        month = input('请输入当前月份：（如10、11）\n').strip()
         option = input('是否需要手动修改文件名（y/n)\n').strip()
         if option == '111':
             temp_option = option
@@ -267,7 +269,6 @@ if __name__ == "__main__":
         else:
             temp_option = 0
         boolean = (option=='n' or option=='N')
-        month = input('请输入当前月份：（如10、11）\n').strip()
         """ 获取名单 """
         print("\n************  处理（1/15）：人员名单  ************")
         # file_name = f'{os.path.dirname(os.path.realpath(sys.argv[0]))}\广州电信分公司_用户管理导出.xlsx'
@@ -404,7 +405,7 @@ if __name__ == "__main__":
             dict_name[i]['修障'] = dict_xiu.get(i, {0:0})[0]
             dict_name[i]['光衰整治'] = 0
             dict_name[i]['合计'] = dict_name[i]['装移机'] + dict_name[i]['修障'] + dict_name[i]['光衰整治']
-            dict_name[i]['合计（日均8，20工作日）'] = 0 if dict_name[i]['合计']/20 < 8 else 1
+            dict_name[i]['合计（日均8，20工作日）'] = 0 if dict_name[i]['合计']/20 <= 8 else 1
             dict_name[i]['非常满意'] = dict_manyi_xiuzhang.get(i, {'非常满意':0})['非常满意'] + dict_manyi_zhuangji.get(i, {'非常满意':0})['非常满意']
             dict_name[i]['满意'] = dict_manyi_xiuzhang.get(i, {'满意':0})['满意'] + dict_manyi_zhuangji.get(i, {'满意':0})['满意']
             dict_name[i]['不满意'] = dict_manyi_xiuzhang.get(i, {'不满意':0})['不满意'] + dict_manyi_zhuangji.get(i, {'不满意':0})['不满意']
@@ -417,7 +418,7 @@ if __name__ == "__main__":
             dict_name[i]['装机无理失约'] = 0
             dict_name[i]['装维无理失约'] = dict_baoyuan_xiuzhang.get(i, {0:0})[0] + dict_baoyuan_zhuangji.get(i, {0:0})[0] + dict_lvtong_xiuzhang.get(i, {0:0})[0] + dict_lvtong_zhuangji.get(i, {0:0})[0]
             dict_name[i]['装机零失约奖金（暂停）'] = 0
-            dict_name[i]['零抱怨奖金'] = 1 if dict_name[i]['装机无理失约'] == 0 and dict_name[i]['装维无理失约'] == 0 and dict_name[i]['合计（日均8，20工作日）'] >= 0 else 0
+            dict_name[i]['零抱怨奖金'] = 500 if dict_name[i]['装机无理失约'] == 0 and dict_name[i]['装维无理失约'] == 0 and dict_name[i]['合计（日均8，20工作日）'] > 0 else 0
             dict_name[i]['服务态度'] = dict_fuwutaidu_xiuzhang.get(i, {0:0})[0] + dict_fuwutaidu_zhuangji.get(i, {0:0})[0]
             dict_name[i]['虚假回单'] = dict_xujia_ivr_guzhang.get(i, {0:0})[0] + dict_xujia_ivr_zhuangji.get(i, {0:0})[0] + dict_xujia_rengong_guzhang.get(i, {0:0})[0] + dict_xujia_rengong_zhuangji.get(i, {0:0})[0]
             dict_name[i]['工信'] = dict_gongxin.get(i, {0:0})[0]

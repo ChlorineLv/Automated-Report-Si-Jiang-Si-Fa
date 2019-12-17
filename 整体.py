@@ -3,7 +3,7 @@
 :Version: Python 3.7.4
 :Date: 2019-11-14 09:53:16
 :LastEditors: ChlorineLv@outlook.com
-:LastEditTime: 2019-12-13 16:26:00
+:LastEditTime: 2019-12-17 17:30:57
 :Description: Null
 '''
 
@@ -233,27 +233,27 @@ def specify_df_frequency_not_in_or(df_get, column_name, column_judge=[]):
     return df.to_dict(orient='index')
 
 
-def specify_df_manyi(df_get, column_name, column_judge):
-    '''
-    :description: 满意度统计
-    :param df_get {dataframe} : dataframe
-    :param column_name {str} : 需要保留的字段
-    :param column_judge {list} : 用于判断不包含的列:值对的集合，如 [{'满意度':'非常满意'}, {'满意度':'满意'}, {'满意度':'不满意'}]
-    :return: [{'工号': {'非常满意': 4.0, '满意': 1.0, '不满意': 0}, ...]
-    '''
-    df_get[column_name] = df_get[column_name].apply(str)
-    df = pd.DataFrame()
-    for i in range(len(column_judge)):
-        for (k,v) in column_judge[i].items():
-            key = k
-            value = column_judge[i][k]
-        df_temp = df_get.loc[df_get[key]==value].groupby(column_name).count()
-        # print(k,value, df_temp)
-        df_temp.columns=[value]
-        df = df.join(df_temp, how='outer')
-        df.fillna(0, inplace=True)
-        df[value] = df[value].apply(int)
-    return df.to_dict(orient='index')
+# def specify_df_manyi(df_get, column_name, column_judge):
+#     '''
+#     :description: 满意度统计
+#     :param df_get {dataframe} : dataframe
+#     :param column_name {str} : 需要保留的字段
+#     :param column_judge {list} : 用于判断不包含的列:值对的集合，如 [{'满意度':'非常满意'}, {'满意度':'满意'}, {'满意度':'不满意'}]
+#     :return: [{'工号': {'非常满意': 4.0, '满意': 1.0, '不满意': 0}, ...]
+#     '''
+#     df_get[column_name] = df_get[column_name].apply(str)
+#     df = pd.DataFrame()
+#     for i in range(len(column_judge)):
+#         for (k,v) in column_judge[i].items():
+#             key = k
+#             value = column_judge[i][k]
+#         df_temp = df_get.loc[df_get[key]==value].groupby(column_name).count()
+#         # print(k,value, df_temp)
+#         df_temp.columns=[value]
+#         df = df.join(df_temp, how='outer')
+#         df.fillna(0, inplace=True)
+#         df[value] = df[value].apply(int)
+#     return df.to_dict(orient='index')
 
 
 if __name__ == "__main__":
@@ -379,7 +379,7 @@ if __name__ == "__main__":
         file_xujia_rengong_zhuangji = f'（人工）装机虚假回单清单{month}月.xlsx'
         file_xujia_rengong_zhuangji = file_xujia_rengong_zhuangji if boolean==True else (input(f'\n请输入《（人工）故障虚假回单清单{month}月》文件名：（默认：{file_xujia_rengong_zhuangji}）\n').strip() or file_xujia_rengong_zhuangji)
         sheet_xujia_rengong_zhuangji = 'Sheet1'
-        column_xujia_rengong_zhuangji = ['装维人员工号', 'B、请问您的电信业务能正常使用吗？']
+        column_xujia_rengong_zhuangji = ['装维人员工号', 'B、请问您的电信业务能正常使用吗？', 'E、请问是哪种情况不能使用？', 'F、请问是什么原因没当场安装好呢？']
         # df_xujia_rengong_zhuangji = get_specified_df(file_xujia_rengong_zhuangji, sheet_xujia_rengong_zhuangji, ['装维人员工号', 'B、请问您的电信业务能正常使用吗？'])
         df_xujia_rengong_zhuangji = get_specified_df(file_xujia_rengong_zhuangji, sheet_xujia_rengong_zhuangji, column_xujia_rengong_zhuangji)
         dict_xujia_rengong_zhuangji = specify_df_frequency_not_in_or(df_xujia_rengong_zhuangji, '装维人员工号',[{'B、请问您的电信业务能正常使用吗？': '能正常使用'}])
@@ -389,8 +389,11 @@ if __name__ == "__main__":
         file_manyi_xiuzhang = f'修障服务测评清单（含IVR&人工）{month}月.xlsx'
         file_manyi_xiuzhang = file_manyi_xiuzhang if boolean==True else (input(f'\n请输入《修障服务测评清单（含IVR&人工）{month}月》文件名：（默认：{file_manyi_xiuzhang}）\n').strip() or file_manyi_xiuzhang)
         sheet_manyi_xiuzhang = 'Sheet1'
-        df_manyi_xiuzhang = get_specified_df(file_manyi_xiuzhang, sheet_manyi_xiuzhang, ['操作工号', '满意度'])
-        dict_manyi_xiuzhang = specify_df_manyi(df_manyi_xiuzhang, '操作工号', [{'满意度':'非常满意'}, {'满意度':'满意'}, {'满意度':'不满意'}])
+        df_manyi_xiuzhang = get_specified_df(file_manyi_xiuzhang, sheet_manyi_xiuzhang, ['查修员工号', '满意度'])
+        # dict_manyi_xiuzhang = specify_df_manyi(df_manyi_xiuzhang, '操作工号', [{'满意度':'非常满意'}, {'满意度':'满意'}, {'满意度':'不满意'}])
+        dict_manyi_xiuzhang_feichang = specify_df_frequency(df_manyi_xiuzhang, '查修员工号', {'满意度':'非常满意'})
+        dict_manyi_xiuzhang_manyi = specify_df_frequency(df_manyi_xiuzhang, '查修员工号', {'满意度':'满意'})
+        dict_manyi_xiuzhang_bumanyi = specify_df_frequency(df_manyi_xiuzhang, '查修员工号', {'满意度':'不满意'})  
         # print(dict_manyi_xiuzhang)
         """ 装机满意度 """
         print("\n************  处理（15/15）：装机满意度  ************")
@@ -399,16 +402,19 @@ if __name__ == "__main__":
         file_manyi_zhuangji = file_manyi_zhuangji if boolean==True else (input(f'\n请输入《装机服务测评清单（含IVR&人工）{month}月》文件名：（默认：{file_manyi_zhuangji}）\n').strip() or file_manyi_zhuangji)
         sheet_manyi_zhuangji = 'Sheet1'
         df_manyi_zhuangji = get_specified_df(file_manyi_zhuangji, sheet_manyi_zhuangji, ['装维人员工号', '满意度'])
-        dict_manyi_zhuangji = specify_df_manyi(df_manyi_zhuangji, '装维人员工号', [{'满意度':'非常满意'}, {'满意度':'满意'}, {'满意度':'不满意'}])
+        # dict_manyi_zhuangji = specify_df_manyi(df_manyi_zhuangji, '装维人员工号', [{'满意度':'非常满意'}, {'满意度':'满意'}, {'满意度':'不满意'}])
+        dict_manyi_zhuangji_feichang = specify_df_frequency(df_manyi_zhuangji, '装维人员工号', {'满意度':'非常满意'})
+        dict_manyi_zhuangji_manyi = specify_df_frequency(df_manyi_zhuangji, '装维人员工号', {'满意度':'满意'})
+        dict_manyi_zhuangji_bumanyi = specify_df_frequency(df_manyi_zhuangji, '装维人员工号', {'满意度':'不满意'})
         for i in dict_name:
             dict_name[i]['装移机'] = dict_zhuang.get(i, {0:0})[0]
             dict_name[i]['修障'] = dict_xiu.get(i, {0:0})[0]
             dict_name[i]['光衰整治'] = 0
             dict_name[i]['合计'] = dict_name[i]['装移机'] + dict_name[i]['修障'] + dict_name[i]['光衰整治']
             dict_name[i]['合计（日均8，20工作日）'] = 0 if dict_name[i]['合计']/20 <= 8 else 1
-            dict_name[i]['非常满意'] = dict_manyi_xiuzhang.get(i, {'非常满意':0})['非常满意'] + dict_manyi_zhuangji.get(i, {'非常满意':0})['非常满意']
-            dict_name[i]['满意'] = dict_manyi_xiuzhang.get(i, {'满意':0})['满意'] + dict_manyi_zhuangji.get(i, {'满意':0})['满意']
-            dict_name[i]['不满意'] = dict_manyi_xiuzhang.get(i, {'不满意':0})['不满意'] + dict_manyi_zhuangji.get(i, {'不满意':0})['不满意']
+            dict_name[i]['非常满意'] = dict_manyi_xiuzhang_feichang.get(i, {0:0})[0] + dict_manyi_zhuangji_feichang.get(i, {0:0})[0]
+            dict_name[i]['满意'] = dict_manyi_xiuzhang_manyi.get(i, {0:0})[0] + dict_manyi_zhuangji_manyi.get(i, {0:0})[0]
+            dict_name[i]['不满意'] = dict_manyi_xiuzhang_bumanyi.get(i, {0:0})[0] + dict_manyi_zhuangji_bumanyi.get(i, {0:0})[0]
             dict_name[i]['满意奖金'] = dict_name[i]['满意'] * 0 + dict_name[i]['非常满意'] * 5
             dict_name[i]['表扬（暂停）'] = 0
             dict_name[i]['表扬奖金'] = 0
